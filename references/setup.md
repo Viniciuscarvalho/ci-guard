@@ -6,20 +6,52 @@ with two files.
 
 ## One-time machine setup
 
-Install the skill the same way you'd install any skills.sh skill (assuming
-you're using a runtime that supports them — Codex, Claude Code, opencode,
-etc.):
+ci-guard works with any agent. The Python scripts have no LLM dependency —
+the agent only reads the `SKILL.md` playbook and drives the scripts. Only the
+install path differs per agent.
+
+### Skills.sh-compatible runtimes (Claude Code, Codex, opencode)
 
 ```bash
-npx skills add <repo-url> --skill ci-guard
+# Auto-detects your runtime and installs to the right path
+npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard
 ```
 
-Or, if you're maintaining your own copy, drop the `ci-guard/` directory into
-your skills path (`~/.claude/skills/`, `.codex/skills/`, etc.) directly.
+Or symlink your local copy directly:
 
-Also required: `gh` CLI authenticated against the repo's host. The skill uses
-`gh` for everything, so `gh auth status` should be green before running any
-script.
+```bash
+# Claude Code
+ln -s /path/to/ci-guard ~/.claude/skills/ci-guard
+
+# Codex
+ln -s /path/to/ci-guard ~/.codex/skills/ci-guard
+
+# opencode
+ln -s /path/to/ci-guard ~/.opencode/skills/ci-guard
+```
+
+The per-repo bootstrap below uses `$SKILLS_HOME` to find the scripts. If your
+agent sets a different env var, override `SKILL_DIR` manually.
+
+### Agents without a native skill path (Gemini CLI, Cursor, Copilot, etc.)
+
+These agents have no `~/.agent/skills/` convention. Instead, deliver the
+playbook by pasting `SKILL.md` content into your agent context file:
+
+| Agent                        | Context file                                    |
+| ---------------------------- | ----------------------------------------------- |
+| Gemini CLI                   | `.gemini/GEMINI.md` or `GEMINI.md` at repo root |
+| Cursor                       | `.cursorrules`                                  |
+| GitHub Copilot               | `.github/copilot-instructions.md`               |
+| Any (`AGENTS.md` convention) | `AGENTS.md` at repo root                        |
+
+The `.ci-guard/scripts/` directory and all commands work identically regardless
+of which agent is reading the instructions.
+
+### Required: `gh` CLI
+
+All scripts call `gh` for GitHub API access. Run `gh auth status` before using
+any script — it must show the repo's host as authenticated.
 
 ## Per-repo setup (copy-paste)
 
@@ -114,15 +146,15 @@ threshold; that's a project-by-project decision.
 `.ci-guard/config.yml` is a flat key/value file (the parser is intentionally
 minimal so the skill has no YAML dependency). Supported keys:
 
-| Key | Type | Default | Notes |
-|---|---|---|---|
-| `retries_per_job` | int | 2 | Hard cap on reruns of a single job within one PR. |
-| `retries_per_pr` | int | 5 | Hard cap on total reruns across all jobs in one PR. |
-| `minutes_per_pr` | int | 90 | Cumulative CI minutes consumed by reruns. |
-| `watch_interval_seconds` | int | 60 | Polling cadence for `--watch`. |
-| `quarantine_failure_threshold` | int | 3 | Failures in 30d before a test becomes a quarantine candidate. |
-| `quarantine_rate_threshold` | float | 0.05 | Flake rate threshold (5%). |
-| `record_passes_for_untracked` | bool | false | If true, record passes for tests not yet in the ledger. Almost always leave false. |
+| Key                            | Type  | Default | Notes                                                                              |
+| ------------------------------ | ----- | ------- | ---------------------------------------------------------------------------------- |
+| `retries_per_job`              | int   | 2       | Hard cap on reruns of a single job within one PR.                                  |
+| `retries_per_pr`               | int   | 5       | Hard cap on total reruns across all jobs in one PR.                                |
+| `minutes_per_pr`               | int   | 90      | Cumulative CI minutes consumed by reruns.                                          |
+| `watch_interval_seconds`       | int   | 60      | Polling cadence for `--watch`.                                                     |
+| `quarantine_failure_threshold` | int   | 3       | Failures in 30d before a test becomes a quarantine candidate.                      |
+| `quarantine_rate_threshold`    | float | 0.05    | Flake rate threshold (5%).                                                         |
+| `record_passes_for_untracked`  | bool  | false   | If true, record passes for tests not yet in the ledger. Almost always leave false. |
 
 ## Migrating an existing flaky-test list
 
@@ -135,7 +167,7 @@ for test_id in tests/foo.py::test_bar tests/baz.py::test_qux; do
 done
 ```
 
-Each `record-failure` adds an event dated *now*, so all the migrated tests
+Each `record-failure` adds an event dated _now_, so all the migrated tests
 will have a `failure_count_30d` of 1 to start. They'll need real failures
 before they cross the quarantine threshold, which is correct — the skill
 shouldn't quarantine on hearsay.

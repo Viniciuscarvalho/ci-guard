@@ -47,15 +47,34 @@ ci-guard makes Claude refuse to retry until a failure is _classified_, and refus
 
 ## Quick start
 
-```bash
-# Step 1 — register the skill (once per machine)
-ln -s /path/to/ci-guard ~/.claude/skills/ci-guard
-```
+**Step 1 — register the skill (once per machine)**
+
+Pick the path for your agent:
 
 ```bash
-# Step 2 — bootstrap a repo (once per project, from repo root)
+# Claude Code
+ln -s /path/to/ci-guard ~/.claude/skills/ci-guard
+
+# Codex
+ln -s /path/to/ci-guard ~/.codex/skills/ci-guard
+
+# opencode
+ln -s /path/to/ci-guard ~/.opencode/skills/ci-guard
+
+# Any skills.sh-compatible runtime (auto-detects the right path)
+npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard
+
+# Gemini CLI / Cursor / other — no native skill path; paste SKILL.md content
+# into your agent context file (GEMINI.md, .cursorrules, etc.) instead.
+```
+
+**Step 2 — bootstrap a repo (once per project, from repo root)**
+
+```bash
 mkdir -p .ci-guard/scripts
-cp ~/.claude/skills/ci-guard/scripts/*.py .ci-guard/scripts/
+# SKILL_DIR auto-detects your agent's install path; override if needed.
+SKILL_DIR="${SKILLS_HOME:-$HOME/.claude/skills}/ci-guard"
+cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
 chmod +x .ci-guard/scripts/*.py
 echo '{"version": 1, "tests": {}, "history": []}' > .ci-guard/flaky-ledger.json
 echo ".ci-guard/.watch-state.json" >> .gitignore
@@ -142,7 +161,7 @@ A test crosses the quarantine threshold at `failure_count_30d ≥ 3` AND `flake_
 
 ```
 ci-guard/
-├── SKILL.md                          # Playbook Claude reads at runtime
+├── SKILL.md                          # Playbook any agent reads at runtime
 ├── scripts/
 │   ├── ci_watch.py                   # Snapshot CI state, classify, gate retries
 │   ├── classify_failure.py           # Heuristic log analysis
@@ -163,13 +182,35 @@ ci-guard/
 
 ### Step 1 — Register the skill (once per machine)
 
+ci-guard works with any agent. Only the install path differs:
+
+| Agent                       | Skill path                     |
+| --------------------------- | ------------------------------ |
+| Claude Code                 | `~/.claude/skills/ci-guard/`   |
+| Codex                       | `~/.codex/skills/ci-guard/`    |
+| opencode                    | `~/.opencode/skills/ci-guard/` |
+| skills.sh (auto)            | detected from `$SKILLS_HOME`   |
+| Gemini CLI / Cursor / other | no native path — see below     |
+
 ```bash
-# Symlink (recommended — edits to the source are reflected instantly)
+# Claude Code (symlink recommended — source edits reflect instantly)
 ln -s /path/to/ci-guard ~/.claude/skills/ci-guard
 
-# Or copy
-cp -r /path/to/ci-guard ~/.claude/skills/ci-guard
+# Codex
+ln -s /path/to/ci-guard ~/.codex/skills/ci-guard
+
+# opencode
+ln -s /path/to/ci-guard ~/.opencode/skills/ci-guard
+
+# Any skills.sh-compatible runtime (resolves path automatically)
+npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard
 ```
+
+**Gemini CLI, Cursor, Copilot, or any other agent with no native skill path:**
+paste the contents of `SKILL.md` into your agent context file
+(`.gemini/GEMINI.md`, `.cursorrules`, `AGENTS.md`, etc.). The scripts still
+live in `.ci-guard/scripts/` and work identically — only the playbook
+delivery changes.
 
 ### Step 2 — Bootstrap the repo (once per project)
 
@@ -178,7 +219,8 @@ From the project root:
 ```bash
 mkdir -p .ci-guard/scripts
 
-SKILL_DIR="$HOME/.claude/skills/ci-guard"
+# Auto-detects your agent's path via $SKILLS_HOME; override SKILL_DIR if needed.
+SKILL_DIR="${SKILLS_HOME:-$HOME/.claude/skills}/ci-guard"
 cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
 chmod +x .ci-guard/scripts/*.py
 
