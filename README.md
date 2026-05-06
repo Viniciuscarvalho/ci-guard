@@ -1,4 +1,40 @@
-# ci-guard
+<p align="center">
+  <img src="assets/banner.svg" alt="ci-guard — classify before you retry" width="900">
+</p>
+
+<p align="center">
+  <strong>Stop burning CI minutes on blind retries. Classify every failure before touching rerun.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Viniciuscarvalho/ci-guard/actions/workflows/ci.yml">
+    <img src="https://github.com/Viniciuscarvalho/ci-guard/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
+  <a href="https://github.com/Viniciuscarvalho/ci-guard/releases">
+    <img src="https://img.shields.io/github/v/release/Viniciuscarvalho/ci-guard?include_prereleases" alt="Release">
+  </a>
+  <a href="https://github.com/Viniciuscarvalho/ci-guard/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
+  </a>
+  <a href="https://github.com/Viniciuscarvalho/ci-guard">
+    <img src="https://img.shields.io/badge/python-3.9%2B-green.svg" alt="Python 3.9+">
+  </a>
+  <a href="https://github.com/Viniciuscarvalho/ci-guard">
+    <img src="https://img.shields.io/badge/works%20with-Claude%20Code-8b5cf6.svg" alt="Works with Claude Code">
+  </a>
+  <a href="https://github.com/Viniciuscarvalho/ci-guard">
+    <img src="https://img.shields.io/badge/CI-GitHub%20Actions-black.svg" alt="GitHub Actions">
+  </a>
+  <a href="https://github.com/sponsors/Viniciuscarvalho">
+    <img src="https://img.shields.io/badge/sponsor-♥-ea4aaa.svg" alt="Sponsor">
+  </a>
+</p>
+
+<p align="center">
+  <code>failure classification</code> · <code>flaky ledger</code> · <code>cost guard</code> · <code>verify greens</code> · <code>quarantine</code> · <code>GitHub Actions</code>
+</p>
+
+---
 
 Protects your CI from two failure modes that silently drain money and hide bugs:
 
@@ -6,6 +42,36 @@ Protects your CI from two failure modes that silently drain money and hide bugs:
 2. **Trusting a single green** — a known-flaky test passes once after several failures. The PR merges. Production breaks.
 
 ci-guard makes Claude refuse to retry until a failure is _classified_, and refuse to trust a green on a known-flaky test until it is _verified_.
+
+---
+
+## Quick start
+
+```bash
+# Step 1 — register the skill (once per machine)
+ln -s /path/to/ci-guard ~/.claude/skills/ci-guard
+```
+
+```bash
+# Step 2 — bootstrap a repo (once per project, from repo root)
+mkdir -p .ci-guard/scripts
+cp ~/.claude/skills/ci-guard/scripts/*.py .ci-guard/scripts/
+chmod +x .ci-guard/scripts/*.py
+echo '{"version": 1, "tests": {}, "history": []}' > .ci-guard/flaky-ledger.json
+echo ".ci-guard/.watch-state.json" >> .gitignore
+git add .ci-guard .gitignore && git commit -m "ci: bootstrap ci-guard"
+```
+
+```bash
+# Snapshot a failing PR
+python3 .ci-guard/scripts/ci_watch.py --pr auto --once
+
+# Budget-safe retry (refuses on branch_failure or exhausted budget)
+python3 .ci-guard/scripts/ci_watch.py --pr auto --retry-failed-now
+
+# Verify a flaky green before merging
+python3 .ci-guard/scripts/ci_watch.py --pr auto --verify-flaky-green
+```
 
 ---
 
