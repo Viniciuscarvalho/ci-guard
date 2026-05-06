@@ -1,70 +1,325 @@
 # ci-guard
 
-A skills.sh / Anthropic Agent Skills compatible skill that protects your CI
-from two specific failure modes:
+Protects your CI from two failure modes that silently drain money and hide bugs:
 
-1. **Blind retries** — failed checks getting `gh run rerun`'d without anyone
-   classifying *why* they failed.
-2. **Trusting a single green** — a known-flaky test passing once and the PR
-   merging, masking either real bugs or chronic flakys.
+1. **Blind retries** — a check fails, someone hits "rerun failed jobs", it passes, the PR merges. The flaky test never gets fixed and burns minutes on every future PR.
+2. **Trusting a single green** — a known-flaky test passes once after several failures. The PR merges. Production breaks.
 
-## Structure
+ci-guard makes Claude refuse to retry until a failure is _classified_, and refuse to trust a green on a known-flaky test until it is _verified_.
+
+---
+
+## How it works
+
+Every retry decision goes through a strict gate sequence:
+
+```
+Failure detected
+      │
+      ▼
+Gate 1 — Snapshot      classify all failing checks
+      │
+      ▼
+Gate 2 — Classify      branch_failure? → never retry, patch code
+                        infra_flake?    → retry once if budget allows
+                        test_flake?     → retry once + verify the green
+                        dependency?     → retry once; second time = branch_failure
+                        unknown?        → read logs manually, never auto-retry
+      │
+      ▼
+Gate 3 — Cost guard    retries_per_job / retries_per_pr / minutes_per_pr
+                        budget exceeded? → stop, surface to user
+      │
+      ▼
+Gate 4 — Verify green  test_flake turned green? → require one verification rerun
+                        two consecutive greens on same SHA → trust it
+      │
+      ▼
+Gate 5 — Quarantine    failure_count_30d ≥ 3 AND flake_rate ≥ 5%?
+                        → recommend quarantine (human decides)
+```
+
+### Failure classifications
+
+| Class                | What it means                                                        | Action                                             |
+| -------------------- | -------------------------------------------------------------------- | -------------------------------------------------- |
+| `branch_failure`     | Compile error, type error, lint fail, test in a file this PR touched | **Never retry.** Fix the code.                     |
+| `infra_flake`        | Runner shutdown, DNS timeout, registry 502, disk pressure            | Retry once within budget.                          |
+| `test_flake`         | Test appears in the flaky ledger, or log shows race/timeout language | Retry once + verify the resulting green.           |
+| `dependency_failure` | npm/pip/cargo registry 5xx, lockfile drift                           | Retry once. Recurs on same SHA → `branch_failure`. |
+| `unknown`            | Heuristics couldn't classify                                         | Read the log manually. Never default to retry.     |
+
+### Retry budgets (default, configurable)
+
+| Budget            | Default | Meaning                                  |
+| ----------------- | ------- | ---------------------------------------- |
+| `retries_per_job` | 2       | Max reruns of one job per PR             |
+| `retries_per_pr`  | 5       | Max reruns across all jobs per PR        |
+| `minutes_per_pr`  | 90      | Cumulative CI minutes consumed by reruns |
+
+Exceeding any budget stops all retries and surfaces the situation. There are no warnings or grace periods — friction is the point.
+
+### Flaky ledger
+
+`.ci-guard/flaky-ledger.json` is committed to the repo. It records every test failure and pass event with a rolling 30-day window. Each entry tracks:
+
+- `failure_count_30d` / `pass_count_30d` — rolling counts
+- `flake_rate` — `failures / (failures + passes)` over 30 days
+- `status` — `watched`, `quarantined`, or `fixed`
+- `events` — append-only log (source of truth for all derived fields)
+
+A test crosses the quarantine threshold at `failure_count_30d ≥ 3` AND `flake_rate ≥ 5%`. ci-guard recommends quarantine; a human confirms it.
+
+---
+
+## Project structure
 
 ```
 ci-guard/
-├── SKILL.md                              # The playbook Claude reads
+├── SKILL.md                          # Playbook Claude reads at runtime
 ├── scripts/
-│   ├── ci_watch.py                       # Snapshot CI state, classify, gate retries
-│   ├── classify_failure.py               # Heuristic log analysis
-│   └── flaky_ledger.py                   # Persistent flaky-test ledger CLI
+│   ├── ci_watch.py                   # Snapshot CI state, classify, gate retries
+│   ├── classify_failure.py           # Heuristic log analysis
+│   └── flaky_ledger.py               # Persistent flaky-test ledger CLI
 ├── references/
-│   ├── heuristics.md                     # Failure classification decision tree
-│   ├── cost-controls.md                  # Retry budgets and rationale
-│   ├── flaky-detection.md                # Ledger schema and verification protocol
-│   ├── setup.md                          # Per-project setup steps
-│   └── ci-providers.md                   # Adapting to GitLab/CircleCI/Buildkite
+│   ├── heuristics.md                 # Failure classification decision tree
+│   ├── cost-controls.md              # Retry budgets and rationale
+│   ├── flaky-detection.md            # Ledger schema and verification protocol
+│   ├── setup.md                      # Per-project setup steps
+│   └── ci-providers.md               # Adapting to GitLab / CircleCI / Buildkite
 └── assets/
-    └── flaky-quarantine-template.md      # Issue body template
+    └── flaky-quarantine-template.md  # Issue body template
 ```
 
-## Install
+---
 
-skills.sh-compatible runtimes (Codex, Claude Code, opencode, etc.):
+## Installation
+
+### Step 1 — Register the skill (once per machine)
 
 ```bash
-npx skills add <your-repo-url> --skill ci-guard
+# Symlink (recommended — edits to the source are reflected instantly)
+ln -s /path/to/ci-guard ~/.claude/skills/ci-guard
+
+# Or copy
+cp -r /path/to/ci-guard ~/.claude/skills/ci-guard
 ```
 
-Or copy the directory directly into your skills path
-(`~/.claude/skills/ci-guard/`).
+### Step 2 — Bootstrap the repo (once per project)
 
-## Per-repo setup
-
-See `references/setup.md`. The short version:
+From the project root:
 
 ```bash
 mkdir -p .ci-guard/scripts
-cp ~/.claude/skills/ci-guard/scripts/*.py .ci-guard/scripts/
+
+SKILL_DIR="$HOME/.claude/skills/ci-guard"
+cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
 chmod +x .ci-guard/scripts/*.py
+
+cat > .ci-guard/config.yml <<'YAML'
+# Per-project ci-guard config. Defaults shown; uncomment to override.
+# retries_per_job: 2
+# retries_per_pr: 5
+# minutes_per_pr: 90
+# watch_interval_seconds: 60
+YAML
+
 echo '{"version": 1, "tests": {}, "history": []}' > .ci-guard/flaky-ledger.json
+
 echo ".ci-guard/.watch-state.json" >> .gitignore
+
 git add .ci-guard .gitignore
-git commit -m "ci-guard: bootstrap"
+git commit -m "ci: bootstrap ci-guard"
 ```
+
+### Prerequisites
+
+- Python 3.9+ (stdlib only — no `pip install` needed)
+- `gh` CLI authenticated against the repo's GitHub host (`gh auth status`)
+
+---
+
+## Usage
+
+All commands run from the project root. The scripts use `gh` internally — no tokens to manage.
+
+### Snapshot a failing PR
+
+```bash
+# Infer PR from current branch
+python3 .ci-guard/scripts/ci_watch.py --pr auto --once
+
+# Specific PR number
+python3 .ci-guard/scripts/ci_watch.py --pr 42 --once
+```
+
+Output:
+
+```
+PR #42  SHA a1b2c3d
+─────────────────────────────────────────
+Failing checks:
+  • test-unit   [branch_failure]   never retry — fix the code
+  • test-e2e    [test_flake]       retry allowed (1/2 job, 1/5 PR)
+
+Greens needing verification:
+  • test-integration  (in flaky ledger; 8.7% over 30d)
+
+Budget: 1/5 retries, 23/90 min spent
+Quarantine candidates: 0
+
+Recommended next action: patch the branch_failure in test-unit before retrying test-e2e
+```
+
+### Budget-safe retry
+
+The only sanctioned way to retry. Refuses if any failure is `branch_failure` or budgets are exceeded.
+
+```bash
+python3 .ci-guard/scripts/ci_watch.py --pr auto --retry-failed-now
+```
+
+### Verify a flaky green before merging
+
+```bash
+python3 .ci-guard/scripts/ci_watch.py --pr auto --verify-flaky-green
+```
+
+Requires two consecutive greens on the same SHA before the check is trusted.
+
+### Continuous watch mode
+
+```bash
+python3 .ci-guard/scripts/ci_watch.py --pr auto --watch
+```
+
+Use only when explicitly monitoring a PR. For most diagnosis, `--once` is correct.
+
+### Classify an arbitrary run log
+
+```bash
+python3 .ci-guard/scripts/classify_failure.py --run-id <run-id>
+python3 .ci-guard/scripts/classify_failure.py --log-file <path>
+```
+
+### Ledger operations
+
+```bash
+# Query a specific test
+python3 .ci-guard/scripts/flaky_ledger.py query --test "tests/auth/test_login.py::test_oauth"
+
+# List quarantine candidates
+python3 .ci-guard/scripts/flaky_ledger.py quarantine-candidates
+
+# Mark a test quarantined after filing the issue
+python3 .ci-guard/scripts/flaky_ledger.py set-status \
+    --test "tests/auth/test_login.py::test_oauth" \
+    --status quarantined \
+    --issue-url "https://github.com/org/repo/issues/42"
+
+# Remove stale entries (no failures in 60 days, not quarantined)
+python3 .ci-guard/scripts/flaky_ledger.py prune --older-than 60
+
+# Record a failure manually (e.g. from CI, see below)
+python3 .ci-guard/scripts/flaky_ledger.py record-failure \
+    --test "tests/auth/test_login.py::test_oauth" --sha abc1234 --run-id 9876543
+```
+
+---
+
+## GitHub Actions integration
+
+The skill works on-demand from your machine. Two optional CI hooks sharpen the ledger automatically.
+
+### Hook 1 — Record failures from the test runner
+
+Add to your test workflow's after-tests step:
+
+```yaml
+- name: Update flaky ledger
+  if: always()
+  run: |
+    python3 .ci-guard/scripts/flaky_ledger.py record-failure \
+      --test "${TEST_ID}" \
+      --sha "${{ github.sha }}" \
+      --run-id "${{ github.run_id }}" || true
+```
+
+Adapt `TEST_ID` to your framework. Most runners produce JUnit XML; a short loop over failed cases is enough.
+
+### Hook 2 — Warn on quarantine candidates
+
+Add as a required status check or a standalone workflow step:
+
+```yaml
+- name: Quarantine guard
+  run: |
+    candidates=$(python3 .ci-guard/scripts/flaky_ledger.py quarantine-candidates)
+    if [ -n "$(echo "$candidates" | jq -r '.[]' 2>/dev/null)" ]; then
+      echo "::warning::Quarantine candidates exist. Review before merging."
+      echo "$candidates"
+    fi
+```
+
+### Recommended: enable concurrency cancellation
+
+Most "wasted CI" comes from running stale workflows on superseded SHAs, not from retries. Add this to every workflow that runs on PRs:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+```
+
+A repo without this typically wastes 10–30% of CI minutes on superseded runs.
+
+---
+
+## Quarantine workflow
+
+When a test crosses the threshold (`failure_count_30d ≥ 3` AND `flake_rate ≥ 5%`):
+
+1. ci-guard surfaces a recommendation with the test ID, flake rate, and a skip-pragma snippet.
+2. A human reviews and confirms.
+3. Add the skip pragma to the test file:
+
+   | Framework     | Pragma                                                         |
+   | ------------- | -------------------------------------------------------------- |
+   | pytest        | `@pytest.mark.skip(reason="ci-guard quarantine: <issue-url>")` |
+   | Jest / Vitest | `it.skip("name", ...)` with a comment linking the issue        |
+   | Go            | `t.Skip("ci-guard quarantine: <issue-url>")`                   |
+   | RSpec         | `it "...", skip: "ci-guard quarantine: <issue-url>"`           |
+   | JUnit 5       | `@Disabled("ci-guard quarantine: <issue-url>")`                |
+   | Cargo         | `#[ignore = "ci-guard quarantine: <issue-url>"]`               |
+
+4. File a GitHub issue using `assets/flaky-quarantine-template.md`.
+5. Mark the ledger entry quarantined:
+
+   ```bash
+   python3 .ci-guard/scripts/flaky_ledger.py set-status \
+       --test "<test-id>" --status quarantined \
+       --issue-url "https://github.com/org/repo/issues/<n>"
+   ```
+
+Quarantine skips the test in CI — it does not delete it. The fix happens in the tracking issue.
+
+---
+
+## Other CI providers
+
+The scripts target GitHub Actions by default. The provider interface is a single `gh()` wrapper in `ci_watch.py` — only four functions need replacing to adapt to another provider. See `references/ci-providers.md` for GitLab CI (`glab`), CircleCI (REST API), and Buildkite.
+
+---
 
 ## Dependencies
 
 - Python 3.9+ (stdlib only)
 - `gh` CLI, authenticated against the repo's GitHub host
 
-No `pip install` needed. The skill is portable across any environment that
-runs Python and has `gh`.
+No `pip install`. No extra services. Portable across any environment that runs Python and has `gh`.
+
+---
 
 ## Relationship to babysit-pr
 
-`babysit-pr` (from openai/codex) sits on a PR end-to-end through merge.
-`ci-guard` is the diagnostic and cost layer underneath that decision-making.
-You can use them together: babysit-pr can shell out to `ci_watch.py` to
-classify failures before deciding to retry, and ci-guard's verification
-protocol catches single-pass-by-luck greens before babysit-pr declares the
-PR ready.
+`babysit-pr` monitors a PR end-to-end through merge. `ci-guard` is the diagnostic and cost layer underneath that decision. They compose: `babysit-pr` can shell out to `ci_watch.py` to classify failures before deciding to retry, and ci-guard's verification protocol catches single-pass-by-luck greens before `babysit-pr` declares the PR ready.
