@@ -1,6 +1,6 @@
 # Heuristics — failure classification decision tree
 
-This document is the source of truth for *how* the skill decides which bucket
+This document is the source of truth for _how_ the skill decides which bucket
 a failed CI check belongs in. The categories are deliberately few because
 every category corresponds to a different action; if you find yourself wanting
 a fifth "kind of" branch failure, the right answer is usually a sub-flag in an
@@ -8,13 +8,13 @@ existing category, not a new top-level bucket.
 
 ## Categories and their actions
 
-| Category | Action |
-|---|---|
-| `branch_failure` | Never retry. Patch code. |
-| `infra_flake` | Retry once if budget allows. |
-| `test_flake` | Retry once + verify the green afterward. |
+| Category             | Action                                                                |
+| -------------------- | --------------------------------------------------------------------- |
+| `branch_failure`     | Never retry. Patch code.                                              |
+| `infra_flake`        | Retry once if budget allows.                                          |
+| `test_flake`         | Retry once + verify the green afterward.                              |
 | `dependency_failure` | Retry once. Second time on same SHA → reclassify as `branch_failure`. |
-| `unknown` | Diagnose manually. Never default to retry. |
+| `unknown`            | Diagnose manually. Never default to retry.                            |
 
 ## Decision order
 
@@ -36,6 +36,23 @@ failures), so branch-failure signals must be checked first.
 
 These almost never appear from infra problems; if the log contains them, the
 branch broke something:
+
+**Test runner output** (checked before compiler signals so a failing test isn't
+masked by a coincidental network line in the same log):
+
+- `not ok N` — TAP/BATS test failure line. Any TAP-compliant runner emits this
+  (BATS, node-tap, Perl TAP). A single `not ok` line means at least one test
+  failed in the suite.
+- `Bail out!` — TAP hard abort. The suite bailed before finishing.
+- `FAILED ` at line start — pytest failed-test summary line.
+- `=== FAILURES ===` — pytest failure section header.
+- `FAIL  <file>` — Jest / Vitest per-file FAIL prefix.
+- `Tests: N failed` — Jest / Vitest summary line.
+- `N failing` — Mocha summary.
+- `--- FAIL:` / `FAIL\t` — Go `go test` output.
+- `N examples, N failure` — RSpec / Ruby.
+
+**Compiler / linter signals:**
 
 - `SyntaxError`, `IndentationError`, `ImportError` from compile-time imports.
 - TypeScript `error TS\d+:`, Flow type errors.
@@ -63,7 +80,7 @@ Anything pointing at a third-party registry or supply-chain endpoint:
 - Go module proxy 5xx (`proxy.golang.org`).
 - Maven Central / Gradle resolution errors.
 
-If the *same* registry-related error appears on a *retry on the same SHA*, it
+If the _same_ registry-related error appears on a _retry on the same SHA_, it
 is no longer a transient issue — it's a lockfile/version-pin problem and
 should be reclassified as `branch_failure`.
 
@@ -105,7 +122,7 @@ The heuristic is fast and cheap; it is not always right. Override it when:
 - You read the log and see a clear category the regexes missed. Add a rule for
   that pattern in `classify_failure.py` so the next person doesn't have to
   re-do the work.
-- The log contains both a branch-failure signal *and* an infra signal. Trust
+- The log contains both a branch-failure signal _and_ an infra signal. Trust
   the branch-failure signal — the infra noise is incidental.
 - A test has been ledger-flagged but the current failure mode is structurally
   different (different error class, different stack frame). It might no
@@ -127,7 +144,7 @@ file. To add one:
 1. Pick the right category and a confidence level (`high`, `medium`, `low`).
 2. Write a regex that's specific enough to not match unrelated logs. Test it
    against three real logs from your repo before committing.
-3. Put it in the right *section* (the file is partitioned by category).
+3. Put it in the right _section_ (the file is partitioned by category).
 4. Bump the `WINDOW_DAYS` constant only if you have a good reason; existing
    ledger entries assume 30.
 
