@@ -28,6 +28,9 @@
   <a href="https://github.com/sponsors/Viniciuscarvalho">
     <img src="https://img.shields.io/badge/sponsor-♥-ea4aaa.svg" alt="Sponsor">
   </a>
+  <a href="https://skills.sh/openai/codex/ci-guard">
+    <img src="https://img.shields.io/badge/Try%20on-skills.sh-orange.svg" alt="Try on skills.sh">
+  </a>
 </p>
 
 <p align="center">
