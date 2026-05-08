@@ -1,0 +1,49 @@
+name: deliver
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+jobs:
+  guard:
+    # Only run for pull_request events, not direct pushes to main.
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      actions: write # trigger reruns via gh run rerun
+      checks: read
+      contents: read
+      pull-requests: write # post annotations and comments
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR=$(gh pr list \
+            --head "${{ github.event.workflow_run.head_branch }}" \
+            --state open \
+            --json number \
+            -q '.[0].number // empty')
+          if [ -z "$PR" ]; then
+            echo "No open PR for branch ${{ github.event.workflow_run.head_branch }}, skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=$PR" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Watch and guard
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 .ci-guard/scripts/ci_watch.py \
+            --pr ${{ steps.pr.outputs.number }} --watch | \
+          python3 .ci-guard/scripts/action_runner.py
