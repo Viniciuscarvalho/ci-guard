@@ -74,13 +74,7 @@ npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard
 **Step 2 — bootstrap a repo (once per project, from repo root)**
 
 ```bash
-mkdir -p .ci-guard/scripts
-# SKILL_DIR auto-detects your agent's install path; override if needed.
-SKILL_DIR="${SKILLS_HOME:-$HOME/.claude/skills}/ci-guard"
-cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
-chmod +x .ci-guard/scripts/*.py
-echo '{"version": 1, "tests": {}, "history": []}' > .ci-guard/flaky-ledger.json
-echo ".ci-guard/.watch-state.json" >> .gitignore
+python3 /path/to/ci-guard/scripts/bootstrap.py
 git add .ci-guard .gitignore && git commit -m "ci: bootstrap ci-guard"
 ```
 
@@ -221,6 +215,22 @@ delivery changes.
 From the project root:
 
 ```bash
+python3 /path/to/ci-guard/scripts/bootstrap.py
+```
+
+The script is idempotent — re-running on an already-bootstrapped repo prints what is current without writing anything. Pass `--dry-run` to preview changes without writing.
+
+After it completes:
+
+```bash
+git add .ci-guard .gitignore
+git commit -m "ci: bootstrap ci-guard"
+```
+
+<details>
+<summary>Advanced: manual bootstrap steps</summary>
+
+```bash
 mkdir -p .ci-guard/scripts
 
 # Auto-detects your agent's path via $SKILLS_HOME; override SKILL_DIR if needed.
@@ -244,6 +254,8 @@ git add .ci-guard .gitignore
 git commit -m "ci: bootstrap ci-guard"
 ```
 
+</details>
+
 ### Prerequisites
 
 - Python 3.9+ (stdlib only — no `pip install` needed)
@@ -262,11 +274,10 @@ git commit -m "ci: bootstrap ci-guard"
 **Per-project script update (once per repo, after a skill update)**
 
 The `.ci-guard/scripts/` files are a snapshot of the skill's scripts at bootstrap
-time. When the skill is updated, re-copy them:
+time. When the skill is updated, re-run bootstrap from the project root:
 
 ```bash
-SKILL_DIR="${SKILLS_HOME:-$HOME/.claude/skills}/ci-guard"
-cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
+python3 /path/to/ci-guard/scripts/bootstrap.py
 git add .ci-guard/scripts && git commit -m "chore: update ci-guard scripts to $(python3 .ci-guard/scripts/config.py 2>/dev/null || echo latest)"
 ```
 

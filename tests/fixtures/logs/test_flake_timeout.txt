@@ -1,0 +1,9 @@
+Running integration test suite
+
+  api_integration: health_check         [PASS]  (12ms)
+  api_integration: create_user          [PASS]  (45ms)
+  api_integration: update_user          [PASS]  (38ms)
+  api_integration: delete_user          [ERROR] Timed out waiting for response (5000ms)
+  api_integration: list_users           [PASS]  (29ms)
+
+Test suite completed. Check server logs for details.
