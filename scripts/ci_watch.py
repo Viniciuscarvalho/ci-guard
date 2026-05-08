@@ -26,20 +26,15 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-# --------------------------------------------------------------------------- #
-# Config
-# --------------------------------------------------------------------------- #
-
-DEFAULT_BUDGET = {
-    "retries_per_job": 2,
-    "retries_per_pr": 5,
-    "minutes_per_pr": 90,
-    "watch_interval_seconds": 60,
-}
-
-LEDGER_PATH_DEFAULT = ".ci-guard/flaky-ledger.json"
-CONFIG_PATH_DEFAULT = ".ci-guard/config.yml"
-STATE_PATH_DEFAULT = ".ci-guard/.watch-state.json"  # gitignored
+sys.path.insert(0, str(Path(__file__).parent))
+from config import (  # noqa: E402
+    DEFAULT_BUDGET,
+    LEDGER_PATH,
+    QUARANTINE_FAIL_THRESHOLD,
+    QUARANTINE_RATE_THRESHOLD,
+    STATE_PATH,
+    load_config,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -154,29 +149,8 @@ def fetch_failed_log(run_id: str, max_chars: int = 20000) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def load_config(repo_root: Path) -> dict:
-    cfg_path = repo_root / CONFIG_PATH_DEFAULT
-    cfg = dict(DEFAULT_BUDGET)
-    if not cfg_path.exists():
-        return cfg
-    # tiny YAML-ish parser (key: value only, to avoid pyyaml dep)
-    for line in cfg_path.read_text().splitlines():
-        line = line.split("#", 1)[0].strip()
-        if not line or ":" not in line:
-            continue
-        k, v = line.split(":", 1)
-        k, v = k.strip(), v.strip()
-        if v.isdigit():
-            cfg[k] = int(v)
-        elif v.lower() in {"true", "false"}:
-            cfg[k] = v.lower() == "true"
-        else:
-            cfg[k] = v
-    return cfg
-
-
 def load_ledger(repo_root: Path) -> dict:
-    p = repo_root / LEDGER_PATH_DEFAULT
+    p = repo_root / LEDGER_PATH
     if not p.exists():
         return {"version": 1, "tests": {}}
     try:
@@ -190,7 +164,7 @@ def load_ledger(repo_root: Path) -> dict:
 
 
 def load_state(repo_root: Path) -> dict:
-    p = repo_root / STATE_PATH_DEFAULT
+    p = repo_root / STATE_PATH
     if not p.exists():
         return {"prs": {}}
     try:
@@ -200,7 +174,7 @@ def load_state(repo_root: Path) -> dict:
 
 
 def save_state(repo_root: Path, state: dict) -> None:
-    p = repo_root / STATE_PATH_DEFAULT
+    p = repo_root / STATE_PATH
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(state, indent=2))
 
@@ -519,7 +493,7 @@ def _quarantine_candidates(ledger: dict) -> list[dict]:
     for tid, entry in ledger.get("tests", {}).items():
         if entry.get("status") == "quarantined":
             continue
-        if entry.get("failure_count_30d", 0) >= 3 and entry.get("flake_rate", 0) >= 0.05:
+        if entry.get("failure_count_30d", 0) >= QUARANTINE_FAIL_THRESHOLD and entry.get("flake_rate", 0) >= QUARANTINE_RATE_THRESHOLD:
             out.append({
                 "test": tid,
                 "failure_count_30d": entry["failure_count_30d"],

@@ -29,10 +29,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-LEDGER_PATH_DEFAULT = Path(".ci-guard/flaky-ledger.json")
+sys.path.insert(0, str(Path(__file__).parent))
+from config import LEDGER_PATH, QUARANTINE_FAIL_THRESHOLD, QUARANTINE_RATE_THRESHOLD  # noqa: E402
+
 WINDOW_DAYS = 30
-QUARANTINE_FAIL_THRESHOLD = 3
-QUARANTINE_RATE_THRESHOLD = 0.05
 
 
 def utcnow_iso() -> str:
@@ -112,7 +112,7 @@ def _ensure_test(data: dict, test_id: str) -> dict:
 
 
 def cmd_record(args, kind: str) -> int:
-    path = Path(args.ledger or LEDGER_PATH_DEFAULT)
+    path = Path(args.ledger or LEDGER_PATH)
     data = load(path)
     entry = _ensure_test(data, args.test)
     entry["events"].append({
@@ -133,7 +133,7 @@ def cmd_record(args, kind: str) -> int:
 
 
 def cmd_query(args) -> int:
-    path = Path(args.ledger or LEDGER_PATH_DEFAULT)
+    path = Path(args.ledger or LEDGER_PATH)
     data = load(path)
     entry = data["tests"].get(args.test)
     if entry is None:
@@ -150,7 +150,7 @@ def cmd_query(args) -> int:
 
 
 def cmd_list(args) -> int:
-    path = Path(args.ledger or LEDGER_PATH_DEFAULT)
+    path = Path(args.ledger or LEDGER_PATH)
     data = load(path)
     rows = []
     for test_id, entry in data["tests"].items():
@@ -169,7 +169,7 @@ def cmd_list(args) -> int:
 
 
 def cmd_quarantine_candidates(args) -> int:
-    path = Path(args.ledger or LEDGER_PATH_DEFAULT)
+    path = Path(args.ledger or LEDGER_PATH)
     data = load(path)
     out = []
     for test_id, entry in data["tests"].items():
@@ -190,7 +190,7 @@ def cmd_quarantine_candidates(args) -> int:
 
 
 def cmd_set_status(args) -> int:
-    path = Path(args.ledger or LEDGER_PATH_DEFAULT)
+    path = Path(args.ledger or LEDGER_PATH)
     data = load(path)
     entry = data["tests"].get(args.test)
     if entry is None:
@@ -210,7 +210,7 @@ def cmd_set_status(args) -> int:
 
 
 def cmd_prune(args) -> int:
-    path = Path(args.ledger or LEDGER_PATH_DEFAULT)
+    path = Path(args.ledger or LEDGER_PATH)
     data = load(path)
     cutoff = datetime.now(timezone.utc) - timedelta(days=args.older_than)
     removed = []
@@ -233,7 +233,7 @@ def cmd_prune(args) -> int:
 
 
 def cmd_repair(args) -> int:
-    path = Path(args.ledger or LEDGER_PATH_DEFAULT)
+    path = Path(args.ledger or LEDGER_PATH)
     if not path.exists():
         print(json.dumps({"action": "noop", "reason": "no ledger"}, indent=2))
         return 0
@@ -265,7 +265,7 @@ def cmd_repair(args) -> int:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     p.add_argument("--ledger", help="Override path to ledger JSON.",
-                   default=str(LEDGER_PATH_DEFAULT))
+                   default=LEDGER_PATH)
     sub = p.add_subparsers(dest="cmd", required=True)
 
     rf = sub.add_parser("record-failure", help="Record a test failure.")
