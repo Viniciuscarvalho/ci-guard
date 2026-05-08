@@ -85,8 +85,10 @@ python3 /path/to/ci-guard/scripts/bootstrap.py
 git add .ci-guard .gitignore && git commit -m "ci: bootstrap ci-guard"
 ```
 
+**Done. Core commands:**
+
 ```bash
-# Snapshot a failing PR
+# Snapshot a failing PR — always start here
 python3 .ci-guard/scripts/ci_watch.py --pr auto --once
 
 # Budget-safe retry (refuses on branch_failure or exhausted budget)
@@ -95,6 +97,9 @@ python3 .ci-guard/scripts/ci_watch.py --pr auto --retry-failed-now
 # Verify a flaky green before merging
 python3 .ci-guard/scripts/ci_watch.py --pr auto --verify-flaky-green
 ```
+
+→ Full install details and agent matrix: [Installation](#installation)
+→ All commands with output examples: [Usage](#usage)
 
 ---
 
@@ -204,11 +209,21 @@ The complete JSON contract — every snapshot field, action shape, terminal valu
 ```
 ci-guard/
 ├── SKILL.md                          # Playbook any agent reads at runtime
+├── agents/
+│   └── openai.yaml                   # Codex / skills.sh interface manifest
 ├── scripts/
+│   ├── bootstrap.py                  # One-time per-project setup (idempotent)
 │   ├── ci_watch.py                   # Snapshot CI state, classify, gate retries
 │   ├── classify_failure.py           # Heuristic log analysis
 │   ├── flaky_ledger.py               # Persistent flaky-test ledger CLI + Python API
+│   ├── action_runner.py              # GitHub CI consumer — posts PR comments / annotations
 │   └── config.py                     # Shared paths, budget defaults, config loader
+├── docs/
+│   ├── agents.md                     # Supported agents and LLM compatibility
+│   ├── architecture.md               # Component diagram and data flow
+│   ├── github-actions.md             # deliver.yml + action_runner.py walkthrough
+│   ├── updating.md                   # Keeping skill and per-project scripts current
+│   └── troubleshooting.md            # Common issues and fixes
 ├── references/
 │   ├── heuristics.md                 # Failure classification decision tree
 │   ├── cost-controls.md              # Retry budgets and rationale
@@ -216,6 +231,9 @@ ci-guard/
 │   ├── setup.md                      # Per-project setup steps
 │   ├── ci-providers.md               # Adapting to GitLab / CircleCI / Buildkite
 │   └── wrapper-contract.md           # --watch JSON contract for wrapper authors
+├── .github/workflows/
+│   ├── ci.yml                        # Matrix tests (Python 3.9 / 3.11 / 3.13)
+│   └── deliver.yml                   # workflow_run → ci_watch | action_runner (PR surfacing)
 └── assets/
     └── flaky-quarantine-template.md  # Issue body template
 ```
@@ -226,29 +244,15 @@ ci-guard/
 
 ### Step 1 — Register the skill (once per machine)
 
-ci-guard works with any agent. Only the install path differs:
+ci-guard works with any agent. Symlink the repo to the agent's skill path — source edits then reflect instantly without re-copying.
 
-| Agent                       | Skill path                     |
-| --------------------------- | ------------------------------ |
-| Claude Code                 | `~/.claude/skills/ci-guard/`   |
-| Codex                       | `~/.codex/skills/ci-guard/`    |
-| opencode                    | `~/.opencode/skills/ci-guard/` |
-| skills.sh (auto)            | detected from `$SKILLS_HOME`   |
-| Gemini CLI / Cursor / other | no native path — see below     |
-
-```bash
-# Claude Code (symlink recommended — source edits reflect instantly)
-ln -s /path/to/ci-guard ~/.claude/skills/ci-guard
-
-# Codex
-ln -s /path/to/ci-guard ~/.codex/skills/ci-guard
-
-# opencode
-ln -s /path/to/ci-guard ~/.opencode/skills/ci-guard
-
-# Any skills.sh-compatible runtime (resolves path automatically)
-npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard
-```
+| Agent                       | Skill path                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| Claude Code                 | `ln -s /path/to/ci-guard ~/.claude/skills/ci-guard`                            |
+| Codex                       | `ln -s /path/to/ci-guard ~/.codex/skills/ci-guard`                             |
+| opencode                    | `ln -s /path/to/ci-guard ~/.opencode/skills/ci-guard`                          |
+| skills.sh (auto)            | `npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard` |
+| Gemini CLI / Cursor / other | no native path — see below                                                     |
 
 **Gemini CLI, Cursor, Copilot, or any other agent with no native skill path:**
 paste the contents of `SKILL.md` into your agent context file
