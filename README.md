@@ -249,6 +249,41 @@ git commit -m "ci: bootstrap ci-guard"
 - Python 3.9+ (stdlib only — no `pip install` needed)
 - `gh` CLI authenticated against the repo's GitHub host (`gh auth status`)
 
+### Updating
+
+**Skill update (once per machine)**
+
+| Install method            | Update command                                                              |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `ln -s` to a git clone    | `cd /path/to/ci-guard && git pull` — the symlink picks up changes instantly |
+| `npx skills add ...`      | `npx skills update ci-guard`                                                |
+| Manual copy of `SKILL.md` | Replace the file with the latest from the repo                              |
+
+**Per-project script update (once per repo, after a skill update)**
+
+The `.ci-guard/scripts/` files are a snapshot of the skill's scripts at bootstrap
+time. When the skill is updated, re-copy them:
+
+```bash
+SKILL_DIR="${SKILLS_HOME:-$HOME/.claude/skills}/ci-guard"
+cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
+git add .ci-guard/scripts && git commit -m "chore: update ci-guard scripts to $(python3 .ci-guard/scripts/config.py 2>/dev/null || echo latest)"
+```
+
+**How to tell if your scripts are stale**
+
+`ci_watch.py` checks on every run and prints to stderr when a newer skill version
+is installed:
+
+```
+[ci-guard] scripts are stale (local 0.2.0, skill 0.3.0). Re-run the bootstrap copy step:
+  SKILL_DIR="${SKILLS_HOME:-$HOME/.claude/skills}/ci-guard"
+  cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
+```
+
+The warning only appears when `skill version > local script version`. No output
+means your scripts are current.
+
 ---
 
 ## Usage
