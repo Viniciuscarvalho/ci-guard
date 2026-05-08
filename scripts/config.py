@@ -96,9 +96,8 @@ def check_script_freshness() -> str | None:
     if _version_tuple(skill_version) > _version_tuple(SCRIPT_VERSION):
         return (
             f"[ci-guard] scripts are stale (local {SCRIPT_VERSION}, "
-            f"skill {skill_version}). Re-run the bootstrap copy step:\n"
-            f"  SKILL_DIR=\"${{SKILLS_HOME:-$HOME/.claude/skills}}/ci-guard\"\n"
-            f"  cp \"$SKILL_DIR/scripts/\"*.py .ci-guard/scripts/"
+            f"skill {skill_version}). Re-run bootstrap from the repo root:\n"
+            f"  python3 /path/to/ci-guard/scripts/bootstrap.py"
         )
     return None
 
