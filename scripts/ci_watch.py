@@ -35,6 +35,7 @@ from config import (  # noqa: E402
     STATE_PATH,
     load_config,
 )
+from flaky_ledger import record_failure, record_pass  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -503,6 +504,45 @@ def retry_failed_now(pr: int, repo_root_path: Path) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# Ledger auto-recording
+# --------------------------------------------------------------------------- #
+
+
+def _auto_record_events(snap: Snapshot, repo_root_path: Path, state: dict) -> None:
+    """Record test_flake failures and passes for ledger-tracked checks.
+
+    Deduplicates by run_id:check_name so repeated --once calls on the
+    same SHA don't double-count events.
+    """
+    ledger = load_ledger(repo_root_path)
+    ledger_path = repo_root_path / LEDGER_PATH
+    pr_key = str(snap.pr_number)
+    pr_state = state["prs"].setdefault(pr_key, {
+        "retries_used": 0, "retries_per_job": {}, "minutes_spent": 0,
+    })
+    recorded: set[str] = set(pr_state.setdefault("recorded_events", []))
+
+    for c in snap.checks:
+        if not c.run_id:
+            continue
+        event_key = f"{c.run_id}:{c.name}"
+        if event_key in recorded:
+            continue
+        if (c.conclusion in {"failure", "cancelled", "timed_out"}
+                and c.classification.get("category") == "test_flake"):
+            record_failure(c.name, sha=snap.head_sha, run_id=c.run_id,
+                           ledger_path=ledger_path)
+            recorded.add(event_key)
+        elif c.conclusion == "success" and c.name in ledger.get("tests", {}):
+            record_pass(c.name, sha=snap.head_sha, run_id=c.run_id,
+                        ledger_path=ledger_path)
+            recorded.add(event_key)
+
+    pr_state["recorded_events"] = list(recorded)
+    save_state(repo_root_path, state)
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 
@@ -514,7 +554,9 @@ def emit(snap: Snapshot) -> None:
 
 
 def cmd_once(pr: int, repo_root_path: Path) -> int:
-    emit(assemble_snapshot(pr, repo_root_path))
+    snap = assemble_snapshot(pr, repo_root_path)
+    emit(snap)
+    _auto_record_events(snap, repo_root_path, load_state(repo_root_path))
     return 0
 
 
@@ -523,9 +565,9 @@ def cmd_watch(pr: int, repo_root_path: Path) -> int:
     interval = int(cfg.get("watch_interval_seconds", 60))
     while True:
         snap = assemble_snapshot(pr, repo_root_path)
-        # JSONL: one object per line
         print(json.dumps(asdict(snap), default=str))
         sys.stdout.flush()
+        _auto_record_events(snap, repo_root_path, load_state(repo_root_path))
         if "stop_pr_closed" in snap.actions:
             return 0
         time.sleep(interval)
