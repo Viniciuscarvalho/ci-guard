@@ -168,7 +168,8 @@ ci-guard/
 ├── scripts/
 │   ├── ci_watch.py                   # Snapshot CI state, classify, gate retries
 │   ├── classify_failure.py           # Heuristic log analysis
-│   └── flaky_ledger.py               # Persistent flaky-test ledger CLI
+│   ├── flaky_ledger.py               # Persistent flaky-test ledger CLI + Python API
+│   └── config.py                     # Shared paths, budget defaults, config loader
 ├── references/
 │   ├── heuristics.md                 # Failure classification decision tree
 │   ├── cost-controls.md              # Retry budgets and rationale
