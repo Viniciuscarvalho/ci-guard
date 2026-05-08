@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -274,39 +275,48 @@ def can_retry(check: CheckSnapshot, budget: dict) -> tuple[bool, str]:
 # --------------------------------------------------------------------------- #
 
 
-def _check_to_snapshot(c: dict, ledger: dict, repo_root_path: Path,
-                       state: dict, pr: int) -> CheckSnapshot:
-    # `gh pr checks` doesn't expose run_id directly; the link does.
-    link = c.get("link", "") or ""
-    run_id = ""
+def _extract_run_id(link: str) -> str:
+    """Parse the GitHub Actions run ID from a check link URL."""
     if "/runs/" in link:
-        run_id = link.split("/runs/")[1].split("/")[0]
-    elif "/actions/runs/" in link:
-        run_id = link.split("/actions/runs/")[1].split("/")[0]
+        return link.split("/runs/")[1].split("/")[0]
+    return ""
 
+
+def _normalize_check(c: dict) -> tuple[str, Optional[str], Optional[int]]:
+    """Map gh pr checks fields to (status, conclusion, duration_seconds)."""
     bucket = (c.get("bucket") or "").lower()
-    state_field = (c.get("state") or "").lower()
-    status = "completed" if bucket in {"pass", "fail", "cancel", "skipping"} else state_field or "in_progress"
-    conclusion = None
-    if bucket == "pass":
-        conclusion = "success"
-    elif bucket == "fail":
-        conclusion = "failure"
-    elif bucket == "cancel":
-        conclusion = "cancelled"
-    elif bucket == "skipping":
-        conclusion = "skipped"
-
+    status = (
+        "completed" if bucket in {"pass", "fail", "cancel", "skipping"}
+        else (c.get("state") or "").lower() or "in_progress"
+    )
+    conclusion = {"pass": "success", "fail": "failure",
+                  "cancel": "cancelled", "skipping": "skipped"}.get(bucket)
     duration_seconds = None
     if c.get("startedAt") and c.get("completedAt"):
-        from datetime import datetime
         try:
             s = datetime.fromisoformat(c["startedAt"].replace("Z", "+00:00"))
             e = datetime.fromisoformat(c["completedAt"].replace("Z", "+00:00"))
             duration_seconds = int((e - s).total_seconds())
         except Exception:
             pass
+    return status, conclusion, duration_seconds
 
+
+def _enrich_check(snap: CheckSnapshot, ledger: dict, repo_root_path: Path) -> None:
+    """Attach classification and flaky history for failed checks (mutates snap)."""
+    if snap.conclusion not in {"failure", "cancelled", "timed_out"}:
+        return
+    snap.classification = classify_check(
+        {"conclusion": snap.conclusion, "name": snap.name, "run_id": snap.run_id},
+        ledger, repo_root_path,
+    )
+    snap.flaky_history = _flaky_history_for_check(snap.classification, ledger)
+
+
+def _check_to_snapshot(c: dict, ledger: dict, repo_root_path: Path,
+                       state: dict, pr: int) -> CheckSnapshot:
+    run_id = _extract_run_id(c.get("link", "") or "")
+    status, conclusion, duration_seconds = _normalize_check(c)
     snap = CheckSnapshot(
         name=c.get("name", "unknown"),
         workflow=c.get("workflow", ""),
@@ -318,15 +328,7 @@ def _check_to_snapshot(c: dict, ledger: dict, repo_root_path: Path,
         retries_used_job=state.get("prs", {}).get(str(pr), {}).get(
             "retries_per_job", {}).get(c.get("name", ""), 0),
     )
-
-    if conclusion in {"failure", "cancelled", "timed_out"}:
-        # only spend tokens classifying actual failures
-        snap.classification = classify_check(
-            {"conclusion": conclusion, "name": snap.name, "run_id": run_id},
-            ledger, repo_root_path,
-        )
-        snap.flaky_history = _flaky_history_for_check(snap.classification, ledger)
-
+    _enrich_check(snap, ledger, repo_root_path)
     return snap
 
 
