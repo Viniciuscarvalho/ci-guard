@@ -44,9 +44,16 @@ Protects your CI from two failure modes that silently drain money and hide bugs:
 1. **Blind retries** — a check fails, someone hits "rerun failed jobs", it passes, the PR merges. The flaky test never gets fixed and burns minutes on every future PR.
 2. **Trusting a single green** — a known-flaky test passes once after several failures. The PR merges. Production breaks.
 
-ci-guard makes Claude refuse to retry until a failure is _classified_, and refuse to trust a green on a known-flaky test until it is _verified_.
+ci-guard makes your coding agent refuse to retry until a failure is _classified_, and refuse to trust a green on a known-flaky test until it is _verified_.
 
 ---
+
+> **Compatibility** — ci-guard's Python scripts call no LLM and require no API key.
+> Your coding agent reads `SKILL.md` and drives the scripts via your shell. It works
+> with Claude Code, OpenAI Codex, opencode, skills.sh runtimes, and any agent that
+> can paste `SKILL.md` into its context (Gemini CLI, Cursor, Copilot, etc.).
+>
+> → See [`docs/agents.md`](docs/agents.md) for the full agent matrix and install paths.
 
 ## Quick start
 
@@ -249,6 +256,8 @@ paste the contents of `SKILL.md` into your agent context file
 live in `.ci-guard/scripts/` and work identically — only the playbook
 delivery changes.
 
+See [`docs/agents.md`](docs/agents.md) for the full agent compatibility matrix and per-agent update commands.
+
 ### Step 2 — Bootstrap the repo (once per project)
 
 From the project root:
@@ -301,6 +310,8 @@ git commit -m "ci: bootstrap ci-guard"
 - `gh` CLI authenticated against the repo's GitHub host (`gh auth status`)
 
 ### Updating
+
+→ Full update guide: [`docs/updating.md`](docs/updating.md)
 
 **Skill update (once per machine)**
 
@@ -457,6 +468,49 @@ Add as a required status check or a standalone workflow step:
     fi
 ```
 
+### Hook 3 — Surface classifications on the PR page
+
+The `deliver.yml` workflow (included in this repo) wires `ci_watch --watch` into a
+`workflow_run` trigger so classifications appear on the PR page automatically — no manual
+invocation needed.
+
+```yaml
+# .github/workflows/deliver.yml (already included in ci-guard — copy to your repo)
+on:
+  workflow_run:
+    workflows: [ci] # replace with your workflow name(s)
+    types: [completed]
+
+jobs:
+  guard:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # trigger reruns via gh run rerun
+      checks: read
+      contents: read
+      pull-requests: write # post comments and annotations
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Watch and guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 .ci-guard/scripts/ci_watch.py --pr auto --watch | \
+          python3 .ci-guard/scripts/action_runner.py
+```
+
+`action_runner.py` consumes the JSONL stream and posts:
+
+- `::error::` / `::warning::` **workflow annotations** visible in the job log and Files tab.
+- **PR comments** on `branch_failure` (do-not-retry warning), `unknown` failure (manual
+  triage prompt), and at the final stop event (a full classification table + budget summary).
+- A **markdown report** in `$GITHUB_STEP_SUMMARY` (visible on the workflow run summary page).
+
+→ See [`docs/github-actions.md`](docs/github-actions.md) for the full walkthrough, opt-in instructions, and troubleshooting.
+
 ### Recommended: enable concurrency cancellation
 
 Most "wasted CI" comes from running stale workflows on superseded SHAs, not from retries. Add this to every workflow that runs on PRs:
@@ -519,3 +573,16 @@ No `pip install`. No extra services. Portable across any environment that runs P
 ## Relationship to babysit-pr
 
 `babysit-pr` monitors a PR end-to-end through merge. `ci-guard` is the diagnostic and cost layer underneath that decision. They compose: `babysit-pr` can shell out to `ci_watch.py` to classify failures before deciding to retry, and ci-guard's verification protocol catches single-pass-by-luck greens before `babysit-pr` declares the PR ready.
+
+---
+
+## Documentation
+
+| File                                                 | Contents                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`docs/agents.md`](docs/agents.md)                   | Supported agents, LLM compatibility, full install matrix                  |
+| [`docs/architecture.md`](docs/architecture.md)       | How the pieces fit together (skill → scripts → ledger → PR page)          |
+| [`docs/github-actions.md`](docs/github-actions.md)   | PR-page surfacing via `deliver.yml` + `action_runner.py`                  |
+| [`docs/updating.md`](docs/updating.md)               | Keeping the skill and per-project scripts current                         |
+| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Common issues and fixes                                                   |
+| [`references/`](references/)                         | Heuristics, cost rationale, ledger schema, wrapper contract, CI providers |
