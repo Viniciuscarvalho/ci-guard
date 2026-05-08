@@ -1,0 +1,7 @@
+Batch job started at 2026-01-15T09:00:00Z
+Loading configuration from config.yaml... done
+Connecting to data source... done
+Processing 10000 records... done
+Writing results to output.json... done
+Verifying output checksums... done
+Process completed successfully in 42 seconds.

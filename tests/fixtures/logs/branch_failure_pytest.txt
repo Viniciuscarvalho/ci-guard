@@ -1,0 +1,20 @@
+collected 42 items
+
+tests/auth/test_login.py::test_oauth_callback PASSED
+tests/auth/test_login.py::test_password_reset PASSED
+tests/auth/test_login.py::test_session_expiry FAILED
+
+===================================== FAILURES =====================================
+_________________________ test_session_expiry _________________________
+
+    def test_session_expiry():
+        user = create_user()
+        token = login(user)
+        advance_time(hours=2)
+>       assert not is_valid(token)
+E       AssertionError: expected token to be expired
+
+tests/auth/test_login.py:58: AssertionError
+=========================== short test summary info ============================
+FAILED tests/auth/test_login.py::test_session_expiry - AssertionError
+1 failed, 41 passed in 3.21s

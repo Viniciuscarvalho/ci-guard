@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "tests": {
+    "test-flaky-job": {
+      "first_seen": "2026-05-08",
+      "last_failure": "2026-05-08",
+      "last_pass": null,
+      "failure_count_30d": 1,
+      "pass_count_30d": 0,
+      "flake_rate": 1.0,
+      "status": "watched",
+      "quarantined_at": null,
+      "quarantine_issue_url": null,
+      "events": [
+        {
+          "kind": "fail",
+          "at": "2026-05-08T00:31:01Z",
+          "sha": "sha123",
+          "run_id": "run-1"
+        }
+      ]
+    },
+    "test-integration": {
+      "first_seen": "2026-05-08",
+      "last_failure": null,
+      "last_pass": "2026-05-08",
+      "failure_count_30d": 0,
+      "pass_count_30d": 1,
+      "flake_rate": 0.0,
+      "status": "watched",
+      "quarantined_at": null,
+      "quarantine_issue_url": null,
+      "events": [
+        {
+          "kind": "pass",
+          "at": "2026-05-08T00:31:01Z",
+          "sha": "sha123",
+          "run_id": "run-2"
+        }
+      ]
+    }
+  },
+  "history": []
+}

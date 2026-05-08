@@ -1,0 +1,12 @@
+
+> my-app@1.0.0 install
+> npm install --frozen-lockfile
+
+npm ERR! 503 Service Unavailable - GET https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz
+npm ERR! 503 Service Unavailable - GET https://registry.npmjs.org/axios/-/axios-1.6.0.tgz
+
+npm ERR! If you are behind a proxy, please make sure that the
+npm ERR! 'proxy' config is set properly.  See: 'npm help config'
+
+npm ERR! A complete log of this run can be found in:
+npm ERR!     /home/runner/.npm/_logs/2026-01-15T10_15_22_000Z-debug.log

@@ -74,13 +74,7 @@ npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard
 **Step 2 — bootstrap a repo (once per project, from repo root)**
 
 ```bash
-mkdir -p .ci-guard/scripts
-# SKILL_DIR auto-detects your agent's install path; override if needed.
-SKILL_DIR="${SKILLS_HOME:-$HOME/.claude/skills}/ci-guard"
-cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
-chmod +x .ci-guard/scripts/*.py
-echo '{"version": 1, "tests": {}, "history": []}' > .ci-guard/flaky-ledger.json
-echo ".ci-guard/.watch-state.json" >> .gitignore
+python3 /path/to/ci-guard/scripts/bootstrap.py
 git add .ci-guard .gitignore && git commit -m "ci: bootstrap ci-guard"
 ```
 
@@ -125,6 +119,12 @@ Gate 4 — Verify green  test_flake turned green? → require one verification r
       ▼
 Gate 5 — Quarantine    failure_count_30d ≥ 3 AND flake_rate ≥ 5%?
                         → recommend quarantine (human decides)
+      │
+      ▼
+Gate 6 — Loop           --watch streams JSONL until terminal state
+                        pr_merged / pr_closed → exit 0
+                        needs_help            → exit 2 (intervene)
+                        budget_exhausted      → exit 3 (investigate)
 ```
 
 ### Failure classifications
@@ -158,6 +158,38 @@ Exceeding any budget stops all retries and surfaces the situation. There are no 
 
 A test crosses the quarantine threshold at `failure_count_30d ≥ 3` AND `flake_rate ≥ 5%`. ci-guard recommends quarantine; a human confirms it.
 
+### Using ci-guard as an engine
+
+`--watch` emits JSONL until a `terminal` value is set. Each snapshot's `actions` list tells the caller what to do next; ci-guard never executes mutations.
+
+```python
+#!/usr/bin/env python3
+"""Minimal wrapper: consume ci-guard --watch JSONL and execute actions."""
+import json, subprocess, sys
+
+pr = sys.argv[1] if len(sys.argv) > 1 else "auto"
+proc = subprocess.Popen(
+    ["python3", ".ci-guard/scripts/ci_watch.py", "--pr", pr, "--watch"],
+    stdout=subprocess.PIPE, text=True,
+)
+for line in proc.stdout:
+    snap = json.loads(line)
+    for action in snap.get("actions", []):
+        a = action["action"]
+        if a == "retry_failed_now":
+            subprocess.run(["python3", ".ci-guard/scripts/ci_watch.py",
+                            "--pr", pr, "--retry-failed-now"])
+        elif a == "verify_flaky_green":
+            subprocess.run(["python3", ".ci-guard/scripts/ci_watch.py",
+                            "--pr", pr, "--verify-flaky-green"])
+        elif a == "stop":
+            print(f"ci-guard: terminal={snap['terminal']}", flush=True)
+            proc.terminate()
+            sys.exit(0 if snap["terminal"] in {"pr_merged", "pr_closed"} else 1)
+```
+
+The complete JSON contract — every snapshot field, action shape, terminal value, and exit code — is in `references/wrapper-contract.md`.
+
 ---
 
 ## Project structure
@@ -175,7 +207,8 @@ ci-guard/
 │   ├── cost-controls.md              # Retry budgets and rationale
 │   ├── flaky-detection.md            # Ledger schema and verification protocol
 │   ├── setup.md                      # Per-project setup steps
-│   └── ci-providers.md               # Adapting to GitLab / CircleCI / Buildkite
+│   ├── ci-providers.md               # Adapting to GitLab / CircleCI / Buildkite
+│   └── wrapper-contract.md           # --watch JSON contract for wrapper authors
 └── assets/
     └── flaky-quarantine-template.md  # Issue body template
 ```
@@ -221,6 +254,22 @@ delivery changes.
 From the project root:
 
 ```bash
+python3 /path/to/ci-guard/scripts/bootstrap.py
+```
+
+The script is idempotent — re-running on an already-bootstrapped repo prints what is current without writing anything. Pass `--dry-run` to preview changes without writing.
+
+After it completes:
+
+```bash
+git add .ci-guard .gitignore
+git commit -m "ci: bootstrap ci-guard"
+```
+
+<details>
+<summary>Advanced: manual bootstrap steps</summary>
+
+```bash
 mkdir -p .ci-guard/scripts
 
 # Auto-detects your agent's path via $SKILLS_HOME; override SKILL_DIR if needed.
@@ -244,10 +293,45 @@ git add .ci-guard .gitignore
 git commit -m "ci: bootstrap ci-guard"
 ```
 
+</details>
+
 ### Prerequisites
 
 - Python 3.9+ (stdlib only — no `pip install` needed)
 - `gh` CLI authenticated against the repo's GitHub host (`gh auth status`)
+
+### Updating
+
+**Skill update (once per machine)**
+
+| Install method            | Update command                                                              |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `ln -s` to a git clone    | `cd /path/to/ci-guard && git pull` — the symlink picks up changes instantly |
+| `npx skills add ...`      | `npx skills update ci-guard`                                                |
+| Manual copy of `SKILL.md` | Replace the file with the latest from the repo                              |
+
+**Per-project script update (once per repo, after a skill update)**
+
+The `.ci-guard/scripts/` files are a snapshot of the skill's scripts at bootstrap
+time. When the skill is updated, re-run bootstrap from the project root:
+
+```bash
+python3 /path/to/ci-guard/scripts/bootstrap.py
+git add .ci-guard/scripts && git commit -m "chore: update ci-guard scripts to $(python3 .ci-guard/scripts/config.py 2>/dev/null || echo latest)"
+```
+
+**How to tell if your scripts are stale**
+
+`ci_watch.py` checks on every run and prints to stderr when a newer skill version
+is installed:
+
+```
+[ci-guard] scripts are stale (local 0.3.0, skill 0.4.0). Re-run bootstrap from the repo root:
+  python3 /path/to/ci-guard/scripts/bootstrap.py
+```
+
+The warning only appears when `skill version > local script version`. No output
+means your scripts are current.
 
 ---
 
