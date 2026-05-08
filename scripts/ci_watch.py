@@ -10,8 +10,6 @@ Depends on: gh CLI (authenticated), python 3.9+, stdlib only.
 Sister scripts:
     flaky_ledger.py        — persistent per-repo flaky-test ledger.
     classify_failure.py    — heuristics for log-based failure classification.
-
-Both are invoked as subprocesses so they can be used standalone too.
 """
 
 from __future__ import annotations
@@ -27,6 +25,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
+from classify_failure import classify  # noqa: E402
 from config import (  # noqa: E402
     DEFAULT_BUDGET,
     LEDGER_PATH,
@@ -197,37 +196,16 @@ def repo_root() -> Path:
 
 
 def classify_check(check: dict, ledger: dict, repo_root_path: Path) -> dict:
-    """Decide which bucket a failed check falls into.
-
-    Order matters: branch_failure dominates flake classifications because a
-    real bug masquerading as a flake is the worst-case outcome.
-    """
+    """Decide which bucket a failed check falls into."""
     if check.get("conclusion") not in {"failure", "cancelled", "timed_out"}:
         return {"category": "n/a", "confidence": "n/a", "reason": "Not a failure."}
 
     run_id = check.get("run_id")
     log = fetch_failed_log(run_id) if run_id else ""
 
-    classifier = repo_root_path / ".ci-guard" / "scripts" / "classify_failure.py"
-    if not classifier.exists():
-        # fall back to inline minimal heuristics so the watcher still works
-        # if the user only installed ci_watch.py
-        return _inline_classify(log, check, ledger)
+    result = classify(log)
 
-    proc = subprocess.run(
-        ["python3", str(classifier), "--stdin", "--check-name", check["name"]],
-        input=log, capture_output=True, text=True, check=False,
-    )
-    if proc.returncode != 0 or not proc.stdout.strip():
-        return _inline_classify(log, check, ledger)
-
-    try:
-        result = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return _inline_classify(log, check, ledger)
-
-    # Augment with ledger lookup: if a known-flaky test is in the failed log,
-    # prefer test_flake even if the heuristics said unknown.
+    # Ledger lookup: if a known-flaky test appears in the log, prefer test_flake.
     flake_hits = _ledger_hits_in_log(log, ledger)
     if flake_hits and result.get("category") in {"unknown", "test_flake"}:
         result["category"] = "test_flake"
@@ -238,62 +216,6 @@ def classify_check(check: dict, ledger: dict, repo_root_path: Path) -> dict:
         )
         result["matched_ledger_tests"] = flake_hits
     return result
-
-
-def _inline_classify(log: str, check: dict, ledger: dict) -> dict:
-    """Last-resort minimal classifier if classify_failure.py is missing."""
-    log_l = log.lower()
-    flake_hits = _ledger_hits_in_log(log, ledger)
-    if flake_hits:
-        return {
-            "category": "test_flake",
-            "confidence": "medium",
-            "reason": "Ledger match (inline fallback).",
-            "matched_ledger_tests": flake_hits,
-        }
-    infra_signals = [
-        "the runner has received a shutdown signal",
-        "lost communication with the server",
-        "could not resolve host",
-        "connection reset by peer",
-        "i/o timeout",
-        "503 service unavailable",
-        "502 bad gateway",
-    ]
-    if any(s in log_l for s in infra_signals):
-        return {
-            "category": "infra_flake",
-            "confidence": "medium",
-            "reason": "Infra-signal match (inline fallback).",
-        }
-    dep_signals = [
-        "npm err! 429",
-        "npm err! 5",
-        "could not get pypi",
-        "error fetching crate",
-        "registry-1.docker.io",
-    ]
-    if any(s in log_l for s in dep_signals):
-        return {
-            "category": "dependency_failure",
-            "confidence": "medium",
-            "reason": "Registry/dependency signal match (inline fallback).",
-        }
-    branch_signals = [
-        "syntaxerror",
-        "compilation failed",
-        "type error",
-        "no such file or directory",
-        "snapshot does not match",
-    ]
-    if any(s in log_l for s in branch_signals):
-        return {
-            "category": "branch_failure",
-            "confidence": "high",
-            "reason": "Branch-signal match (inline fallback).",
-        }
-    return {"category": "unknown", "confidence": "low",
-            "reason": "No matching heuristic; manual diagnosis required."}
 
 
 def _ledger_hits_in_log(log: str, ledger: dict) -> list[str]:
