@@ -1,5 +1,7 @@
 """Tests for action_runner.py — JSONL consumer and action executor."""
 
+from __future__ import annotations
+
 import io
 import json
 import os
