@@ -1,7 +1,7 @@
 ---
 name: ci-guard
-version: 0.3.0
-description: Guard CI from wasted minutes by classifying failures before retrying, and maintain a persistent flaky-test ledger per repo so chronic flakys get quarantined instead of burning money on every PR. Use this skill whenever the user mentions a failing CI check, a red build, retrying jobs, "rerun failed", flaky tests, intermittent failures, or asks why a build keeps breaking — even if they don't say "guard". Also use proactively before suggesting any `gh run rerun` / "retry" / "rebuild" command, before approving a merge with a recently-rerun green check, and when reviewing CI minute usage or cost reports. If the user asks you to monitor or babysit a PR end-to-end through merge, prefer the babysit-pr skill; ci-guard is the diagnostic + cost layer that babysit-pr can call into.
+version: 0.4.0
+description: Guard CI from wasted minutes by classifying failures before retrying, and maintain a persistent flaky-test ledger per repo so chronic flakys get quarantined instead of burning money on every PR. Use this skill whenever the user mentions a failing CI check, a red build, retrying jobs, "rerun failed", flaky tests, intermittent failures, or asks why a build keeps breaking — even if they don't say "guard". Also use proactively before suggesting any `gh run rerun` / "retry" / "rebuild" command, before approving a merge with a recently-rerun green check, when reviewing CI minute usage or cost reports, and when asked to monitor or babysit a PR end-to-end — ci-guard's --watch mode drives the loop and emits a structured actions list; babysit-pr is one orchestrator that can execute the mutations ci-guard recommends.
 ---
 
 # CI Guard
@@ -26,8 +26,9 @@ Trigger this skill when any of these are true:
 - A previously-failing check has just turned green and a merge is imminent.
 - The user is auditing CI minute usage, retry counts, or flaky-test impact.
 - An automated agent (including Claude itself in another skill) is about to call `gh run rerun` or equivalent.
+- The user wants to monitor or babysit a PR end-to-end through merge. ci-guard's `--watch` mode is the loop engine: it polls, classifies, decides, and emits a structured `actions` list with a `terminal` state. The caller (babysit-pr, a custom wrapper, or an agent directly consuming the JSONL) executes the mutations (commits, pushes, thread resolution). ci-guard never mutates the PR.
 
-Do NOT use this skill for first-time CI setup, writing new tests, or fixing tests — those are different jobs. This skill is purely about _triage and decisions_ on existing failures.
+Do NOT use this skill for first-time CI setup, writing new tests, or fixing tests — those are different jobs. This skill is purely about _triage and decisions_ on existing failures. For review-comment surfacing and PR mutations, pair with babysit-pr or a custom wrapper.
 
 ## Inputs
 
@@ -156,6 +157,46 @@ python3 .ci-guard/scripts/classify_failure.py --log-file <path>
 ```
 
 Useful when triaging a failure outside a PR (e.g., a `main`-branch nightly).
+
+## Delivery-loop mode
+
+`--watch` streams JSONL (one JSON object per snapshot) until a `terminal` state is reached. Each snapshot includes two new top-level fields beyond the standard gate output:
+
+### `terminal`
+
+`null` while the loop should continue. Set to one of these values when the loop exits:
+
+| Value              | Meaning                                                                | Exit code |
+| ------------------ | ---------------------------------------------------------------------- | --------- |
+| `pr_merged`        | PR was merged                                                          | 0         |
+| `pr_closed`        | PR was closed without merge                                            | 0         |
+| `needs_help`       | Budget exhausted with quarantine candidates, or branch_failure present | 2         |
+| `budget_exhausted` | Budget exhausted; no automatic path forward                            | 3         |
+
+Exit code 2 means an agent or human must intervene. Exit code 3 means there is a reliability problem to investigate.
+
+### `actions`
+
+An ordered list of structured directives. ci-guard never executes them — the caller does.
+
+| Shape                                                    | Meaning                                                          |
+| -------------------------------------------------------- | ---------------------------------------------------------------- |
+| `{"action": "retry_failed_now"}`                         | Budget allows; trigger `--retry-failed-now`                      |
+| `{"action": "diagnose_branch_failure", "checks": [...]}` | Named checks have `branch_failure`; patch code, do not retry     |
+| `{"action": "diagnose_unknown", "checks": [...]}`        | Named checks are unclassified; read logs before any retry        |
+| `{"action": "verify_flaky_green", "checks": [...]}`      | Named checks flipped green but are in the ledger; trigger verify |
+| `{"action": "stop", "reason": "<terminal>"}`             | Loop is ending; `reason` matches the `terminal` field            |
+| `{"action": "idle"}`                                     | Nothing actionable right now; wait for next poll                 |
+
+### Polling cadence
+
+The loop polls every `watch_interval_seconds` (default 60). When the SHA or any check conclusion changes between polls, the sleep is skipped and the next snapshot is fetched immediately (cadence reset).
+
+### State persistence
+
+`.ci-guard/.watch-state.json` (gitignored) records `last_terminal` per PR. If the loop is interrupted and re-invoked on an already-terminal PR, it exits immediately without polling.
+
+The full JSON contract with every field, shape, and exit code is in `references/wrapper-contract.md`.
 
 ## Decision rules at a glance
 

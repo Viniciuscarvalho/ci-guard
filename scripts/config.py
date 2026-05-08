@@ -14,7 +14,7 @@ from pathlib import Path
 
 # Bump this whenever scripts/*.py change in a way that affects behaviour.
 # Must match the `version:` field in SKILL.md.
-SCRIPT_VERSION = "0.3.0"
+SCRIPT_VERSION = "0.4.0"
 
 _SKILL_SEARCH_PATHS = [
     Path.home() / ".claude" / "skills" / "ci-guard" / "SKILL.md",

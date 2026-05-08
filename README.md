@@ -119,6 +119,12 @@ Gate 4 — Verify green  test_flake turned green? → require one verification r
       ▼
 Gate 5 — Quarantine    failure_count_30d ≥ 3 AND flake_rate ≥ 5%?
                         → recommend quarantine (human decides)
+      │
+      ▼
+Gate 6 — Loop           --watch streams JSONL until terminal state
+                        pr_merged / pr_closed → exit 0
+                        needs_help            → exit 2 (intervene)
+                        budget_exhausted      → exit 3 (investigate)
 ```
 
 ### Failure classifications
@@ -152,6 +158,38 @@ Exceeding any budget stops all retries and surfaces the situation. There are no 
 
 A test crosses the quarantine threshold at `failure_count_30d ≥ 3` AND `flake_rate ≥ 5%`. ci-guard recommends quarantine; a human confirms it.
 
+### Using ci-guard as an engine
+
+`--watch` emits JSONL until a `terminal` value is set. Each snapshot's `actions` list tells the caller what to do next; ci-guard never executes mutations.
+
+```python
+#!/usr/bin/env python3
+"""Minimal wrapper: consume ci-guard --watch JSONL and execute actions."""
+import json, subprocess, sys
+
+pr = sys.argv[1] if len(sys.argv) > 1 else "auto"
+proc = subprocess.Popen(
+    ["python3", ".ci-guard/scripts/ci_watch.py", "--pr", pr, "--watch"],
+    stdout=subprocess.PIPE, text=True,
+)
+for line in proc.stdout:
+    snap = json.loads(line)
+    for action in snap.get("actions", []):
+        a = action["action"]
+        if a == "retry_failed_now":
+            subprocess.run(["python3", ".ci-guard/scripts/ci_watch.py",
+                            "--pr", pr, "--retry-failed-now"])
+        elif a == "verify_flaky_green":
+            subprocess.run(["python3", ".ci-guard/scripts/ci_watch.py",
+                            "--pr", pr, "--verify-flaky-green"])
+        elif a == "stop":
+            print(f"ci-guard: terminal={snap['terminal']}", flush=True)
+            proc.terminate()
+            sys.exit(0 if snap["terminal"] in {"pr_merged", "pr_closed"} else 1)
+```
+
+The complete JSON contract — every snapshot field, action shape, terminal value, and exit code — is in `references/wrapper-contract.md`.
+
 ---
 
 ## Project structure
@@ -169,7 +207,8 @@ ci-guard/
 │   ├── cost-controls.md              # Retry budgets and rationale
 │   ├── flaky-detection.md            # Ledger schema and verification protocol
 │   ├── setup.md                      # Per-project setup steps
-│   └── ci-providers.md               # Adapting to GitLab / CircleCI / Buildkite
+│   ├── ci-providers.md               # Adapting to GitLab / CircleCI / Buildkite
+│   └── wrapper-contract.md           # --watch JSON contract for wrapper authors
 └── assets/
     └── flaky-quarantine-template.md  # Issue body template
 ```
@@ -287,9 +326,8 @@ git add .ci-guard/scripts && git commit -m "chore: update ci-guard scripts to $(
 is installed:
 
 ```
-[ci-guard] scripts are stale (local 0.2.0, skill 0.3.0). Re-run the bootstrap copy step:
-  SKILL_DIR="${SKILLS_HOME:-$HOME/.claude/skills}/ci-guard"
-  cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
+[ci-guard] scripts are stale (local 0.3.0, skill 0.4.0). Re-run bootstrap from the repo root:
+  python3 /path/to/ci-guard/scripts/bootstrap.py
 ```
 
 The warning only appears when `skill version > local script version`. No output
