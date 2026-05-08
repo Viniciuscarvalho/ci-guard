@@ -33,10 +33,14 @@ from config import (  # noqa: E402
     QUARANTINE_FAIL_THRESHOLD,
     QUARANTINE_RATE_THRESHOLD,
     STATE_PATH,
+    check_script_freshness,
     load_config,
 )
 from flaky_ledger import record_failure, record_pass  # noqa: E402
 
+_freshness_warning = check_script_freshness()
+if _freshness_warning:
+    print(_freshness_warning, file=sys.stderr)
 
 # --------------------------------------------------------------------------- #
 # Data shapes

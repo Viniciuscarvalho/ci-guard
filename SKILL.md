@@ -1,5 +1,6 @@
 ---
 name: ci-guard
+version: 0.3.0
 description: Guard CI from wasted minutes by classifying failures before retrying, and maintain a persistent flaky-test ledger per repo so chronic flakys get quarantined instead of burning money on every PR. Use this skill whenever the user mentions a failing CI check, a red build, retrying jobs, "rerun failed", flaky tests, intermittent failures, or asks why a build keeps breaking — even if they don't say "guard". Also use proactively before suggesting any `gh run rerun` / "retry" / "rebuild" command, before approving a merge with a recently-rerun green check, and when reviewing CI minute usage or cost reports. If the user asks you to monitor or babysit a PR end-to-end through merge, prefer the babysit-pr skill; ci-guard is the diagnostic + cost layer that babysit-pr can call into.
 ---
 
@@ -12,7 +13,7 @@ Prevent two specific failure modes that cost teams real money:
 1. **Blind retries.** A check fails, someone (or an agent) hits "rerun failed jobs", it passes, the PR merges. The underlying flaky test never gets fixed and burns minutes on every future PR.
 2. **Trusting a single green.** A known-flaky test passes once after several failures. The PR merges. Production breaks because the test was actually masking a real regression.
 
-This skill makes Claude refuse to retry a failed check until it has been *classified*, and refuse to trust a green result on a known-flaky test until it has been *verified*.
+This skill makes Claude refuse to retry a failed check until it has been _classified_, and refuse to trust a green result on a known-flaky test until it has been _verified_.
 
 A secondary goal is keeping a persistent ledger of flaky tests per repo so chronic offenders get quarantined (skipped with an issue filed) instead of being silently retried forever.
 
@@ -26,7 +27,7 @@ Trigger this skill when any of these are true:
 - The user is auditing CI minute usage, retry counts, or flaky-test impact.
 - An automated agent (including Claude itself in another skill) is about to call `gh run rerun` or equivalent.
 
-Do NOT use this skill for first-time CI setup, writing new tests, or fixing tests — those are different jobs. This skill is purely about *triage and decisions* on existing failures.
+Do NOT use this skill for first-time CI setup, writing new tests, or fixing tests — those are different jobs. This skill is purely about _triage and decisions_ on existing failures.
 
 ## Inputs
 
@@ -67,7 +68,7 @@ The full heuristic decision tree is in `references/heuristics.md`. Read it whene
 Before any retry, check the budget surfaced in the snapshot:
 
 - `retries_used_pr` — total reruns triggered on this PR so far.
-- `retries_used_job` — reruns of *this specific job* so far.
+- `retries_used_job` — reruns of _this specific job_ so far.
 - `pr_minutes_spent` — cumulative CI minutes consumed by this PR.
 
 Default budget (configurable in `.ci-guard/config.yml`):
@@ -100,7 +101,7 @@ After updating the ledger from this run's results, check whether any test has cr
 
 - `failure_count_30d >= 3` AND `flake_rate >= 0.05`.
 
-If so, surface a quarantine recommendation in the final report. Do not auto-quarantine — that's a human-judgment call (the test might be flaky because the *system under test* is genuinely broken, in which case skipping it would mask a real bug). The recommendation should include:
+If so, surface a quarantine recommendation in the final report. Do not auto-quarantine — that's a human-judgment call (the test might be flaky because the _system under test_ is genuinely broken, in which case skipping it would mask a real bug). The recommendation should include:
 
 - The test identifier.
 - The flake rate over the last 30 days.
@@ -199,13 +200,13 @@ Quarantine candidates: <count>  (see ledger query for details)
 Recommended next action: <single concrete action>
 ```
 
-Be explicit about what *not* to do when a budget is exhausted or a `branch_failure` is present — the value of the skill is partly in saying "do not retry" out loud.
+Be explicit about what _not_ to do when a budget is exhausted or a `branch_failure` is present — the value of the skill is partly in saying "do not retry" out loud.
 
 ## Git and CI safety rules
 
 - Never run `gh run rerun` directly. Always go through `ci_watch.py --retry-failed-now` so the budget and ledger update.
 - Never modify `.ci-guard/flaky-ledger.json` by hand — use `flaky_ledger.py`. Manual edits desync the failure counters.
-- Never quarantine a test without explicit user confirmation. The skill *recommends*; the human *decides*.
+- Never quarantine a test without explicit user confirmation. The skill _recommends_; the human _decides_.
 - When in doubt about a classification, surface the ambiguity. Default-to-retry is exactly the failure mode this skill exists to prevent.
 
 ## Per-project setup
