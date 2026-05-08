@@ -98,6 +98,15 @@ def gh(*args: str, check: bool = True) -> str:
         return ""
 
 
+def _gh_returncode(*args: str) -> int:
+    """Run a gh command and return its exit code without raising."""
+    try:
+        return subprocess.run(["gh", *args], capture_output=True, text=True).returncode
+    except FileNotFoundError:
+        sys.stderr.write("ci-guard: 'gh' CLI not found. Install from https://cli.github.com.\n")
+        sys.exit(2)
+
+
 def resolve_pr(arg: str) -> int:
     """Resolve --pr {auto|<n>|<url>} to an integer PR number."""
     if arg == "auto":
@@ -432,16 +441,13 @@ def _quarantine_candidates(ledger: dict) -> list[dict]:
 # --------------------------------------------------------------------------- #
 
 
-def retry_failed_now(pr: int, repo_root_path: Path) -> int:
-    cfg = load_config(repo_root_path)
-    state = load_state(repo_root_path)
-    snap = assemble_snapshot(pr, repo_root_path)
-    budget = snap.cost_summary
-
-    blockers = []
+def _gate_retry(
+    checks: list[CheckSnapshot], budget: dict
+) -> tuple[list[CheckSnapshot], list[dict]]:
+    """Split failed checks into retryable and blocked lists."""
     retryable: list[CheckSnapshot] = []
-
-    for c in snap.checks:
+    blockers: list[dict] = []
+    for c in checks:
         if c.conclusion not in {"failure", "cancelled", "timed_out"}:
             continue
         ok, reason = can_retry(c, budget)
@@ -450,6 +456,15 @@ def retry_failed_now(pr: int, repo_root_path: Path) -> int:
         else:
             blockers.append({"check": c.name, "reason": reason,
                              "category": c.classification.get("category")})
+    return retryable, blockers
+
+
+def retry_failed_now(pr: int, repo_root_path: Path) -> int:
+    cfg = load_config(repo_root_path)
+    state = load_state(repo_root_path)
+    snap = assemble_snapshot(pr, repo_root_path)
+
+    retryable, blockers = _gate_retry(snap.checks, snap.cost_summary)
 
     if blockers:
         sys.stderr.write(
@@ -458,31 +473,31 @@ def retry_failed_now(pr: int, repo_root_path: Path) -> int:
             + "\n"
         )
         print(json.dumps({"action": "retry_refused", "blockers": blockers,
-                          "would_retry": [c.name for c in retryable]},
-                         indent=2))
+                          "would_retry": [c.name for c in retryable]}, indent=2))
         return 1
 
     if not retryable:
         print(json.dumps({"action": "noop", "reason": "no failed checks eligible"}, indent=2))
         return 0
 
+    pr_key = str(pr)
+    pr_state = state["prs"].setdefault(pr_key, {
+        "retries_used": 0, "retries_per_job": {}, "minutes_spent": 0,
+    })
     triggered = []
     for c in retryable:
-        if c.run_id:
-            gh("run", "rerun", c.run_id, "--failed", check=False)
+        if not c.run_id:
+            continue
+        if _gh_returncode("run", "rerun", c.run_id, "--failed") == 0:
             triggered.append(c.name)
-
-            # update budget state
-            pr_key = str(pr)
-            pr_state = state["prs"].setdefault(pr_key, {
-                "retries_used": 0, "retries_per_job": {}, "minutes_spent": 0,
-            })
             pr_state["retries_used"] += 1
             pr_state["retries_per_job"][c.name] = pr_state["retries_per_job"].get(c.name, 0) + 1
+        else:
+            sys.stderr.write(f"ci-guard: rerun of {c.run_id} failed; budget unchanged.\n")
 
     save_state(repo_root_path, state)
     print(json.dumps({"action": "retried", "checks": triggered,
-                      "retries_used_pr": state["prs"][str(pr)]["retries_used"],
+                      "retries_used_pr": pr_state["retries_used"],
                       "retries_max_pr": cfg["retries_per_pr"]}, indent=2))
     return 0
 
