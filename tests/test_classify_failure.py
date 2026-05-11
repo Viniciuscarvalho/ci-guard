@@ -2,9 +2,7 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-from classify_failure import classify  # noqa: E402
+from ci_guard.classify import classify
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "logs"
 

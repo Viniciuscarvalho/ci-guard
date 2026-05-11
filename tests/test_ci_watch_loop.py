@@ -1,11 +1,8 @@
-import sys
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-from ci_watch import CheckSnapshot, Snapshot, _terminal_exit_code, decide_actions  # noqa: E402
+from ci_guard.watch import CheckSnapshot, Snapshot, _terminal_exit_code, decide_actions
 
 
 def _budget(exhausted=False, retries_used=0):
@@ -185,14 +182,14 @@ class TestCmdWatch(unittest.TestCase):
         s.actions = actions or [{"action": "idle"}]
         return s
 
-    @patch("ci_watch._sleep")
-    @patch("ci_watch.save_state")
-    @patch("ci_watch.load_state")
-    @patch("ci_watch._auto_record_events")
-    @patch("ci_watch.assemble_snapshot")
+    @patch("ci_guard.watch._sleep")
+    @patch("ci_guard.watch.save_state")
+    @patch("ci_guard.watch.load_state")
+    @patch("ci_guard.watch._auto_record_events")
+    @patch("ci_guard.watch.assemble_snapshot")
     def test_watch_exits_0_on_pr_merged(self, mock_snap, mock_record, mock_load,
                                         mock_save, mock_sleep):
-        from ci_watch import cmd_watch
+        from ci_guard.watch import cmd_watch
         mock_load.return_value = {"state_version": 1, "prs": {}}
         mock_snap.return_value = self._make_snap(
             pr_state="MERGED", terminal="pr_merged",
@@ -202,14 +199,14 @@ class TestCmdWatch(unittest.TestCase):
         self.assertEqual(result, 0)
         mock_sleep.assert_not_called()
 
-    @patch("ci_watch._sleep")
-    @patch("ci_watch.save_state")
-    @patch("ci_watch.load_state")
-    @patch("ci_watch._auto_record_events")
-    @patch("ci_watch.assemble_snapshot")
+    @patch("ci_guard.watch._sleep")
+    @patch("ci_guard.watch.save_state")
+    @patch("ci_guard.watch.load_state")
+    @patch("ci_guard.watch._auto_record_events")
+    @patch("ci_guard.watch.assemble_snapshot")
     def test_watch_exits_2_on_needs_help(self, mock_snap, mock_record, mock_load,
                                          mock_save, mock_sleep):
-        from ci_watch import cmd_watch
+        from ci_guard.watch import cmd_watch
         mock_load.return_value = {"state_version": 1, "prs": {}}
         mock_snap.return_value = self._make_snap(
             terminal="needs_help",
@@ -219,14 +216,14 @@ class TestCmdWatch(unittest.TestCase):
         result = cmd_watch(1, Path("/tmp"))
         self.assertEqual(result, 2)
 
-    @patch("ci_watch._sleep")
-    @patch("ci_watch.save_state")
-    @patch("ci_watch.load_state")
-    @patch("ci_watch._auto_record_events")
-    @patch("ci_watch.assemble_snapshot")
+    @patch("ci_guard.watch._sleep")
+    @patch("ci_guard.watch.save_state")
+    @patch("ci_guard.watch.load_state")
+    @patch("ci_guard.watch._auto_record_events")
+    @patch("ci_guard.watch.assemble_snapshot")
     def test_watch_exits_3_on_budget_exhausted(self, mock_snap, mock_record, mock_load,
                                                mock_save, mock_sleep):
-        from ci_watch import cmd_watch
+        from ci_guard.watch import cmd_watch
         mock_load.return_value = {"state_version": 1, "prs": {}}
         mock_snap.return_value = self._make_snap(
             terminal="budget_exhausted",
@@ -235,15 +232,15 @@ class TestCmdWatch(unittest.TestCase):
         result = cmd_watch(1, Path("/tmp"))
         self.assertEqual(result, 3)
 
-    @patch("ci_watch._sleep")
-    @patch("ci_watch.save_state")
-    @patch("ci_watch.load_state")
-    @patch("ci_watch._auto_record_events")
-    @patch("ci_watch.assemble_snapshot")
+    @patch("ci_guard.watch._sleep")
+    @patch("ci_guard.watch.save_state")
+    @patch("ci_guard.watch.load_state")
+    @patch("ci_guard.watch._auto_record_events")
+    @patch("ci_guard.watch.assemble_snapshot")
     def test_watch_sleeps_when_no_state_change(self, mock_snap, mock_record, mock_load,
                                                mock_save, mock_sleep):
         """When SHA and check states don't change, _sleep is called."""
-        from ci_watch import cmd_watch
+        from ci_guard.watch import cmd_watch
         mock_load.return_value = {"state_version": 1, "prs": {"1": {"last_seen_sha": "abc"}}}
         idle_snap = self._make_snap()
         idle_snap.head_sha = "abc"
@@ -254,15 +251,15 @@ class TestCmdWatch(unittest.TestCase):
         cmd_watch(1, Path("/tmp"))
         mock_sleep.assert_called_once()
 
-    @patch("ci_watch._sleep")
-    @patch("ci_watch.save_state")
-    @patch("ci_watch.load_state")
-    @patch("ci_watch._auto_record_events")
-    @patch("ci_watch.assemble_snapshot")
+    @patch("ci_guard.watch._sleep")
+    @patch("ci_guard.watch.save_state")
+    @patch("ci_guard.watch.load_state")
+    @patch("ci_guard.watch._auto_record_events")
+    @patch("ci_guard.watch.assemble_snapshot")
     def test_watch_skips_sleep_on_state_change(self, mock_snap, mock_record, mock_load,
                                                mock_save, mock_sleep):
         """When SHA changes between iterations, _sleep is NOT called."""
-        from ci_watch import cmd_watch
+        from ci_guard.watch import cmd_watch
         mock_load.return_value = {"state_version": 1, "prs": {}}
         first_snap = self._make_snap()
         first_snap.head_sha = "sha1"
@@ -273,15 +270,15 @@ class TestCmdWatch(unittest.TestCase):
         cmd_watch(1, Path("/tmp"))
         mock_sleep.assert_not_called()
 
-    @patch("ci_watch._sleep")
-    @patch("ci_watch.save_state")
-    @patch("ci_watch.load_state")
-    @patch("ci_watch._auto_record_events")
-    @patch("ci_watch.assemble_snapshot")
+    @patch("ci_guard.watch._sleep")
+    @patch("ci_guard.watch.save_state")
+    @patch("ci_guard.watch.load_state")
+    @patch("ci_guard.watch._auto_record_events")
+    @patch("ci_guard.watch.assemble_snapshot")
     def test_watch_fast_exit_on_last_terminal(self, mock_snap, mock_record, mock_load,
                                               mock_save, mock_sleep):
         """If last_terminal is already recorded, cmd_watch exits without polling."""
-        from ci_watch import cmd_watch
+        from ci_guard.watch import cmd_watch
         mock_load.return_value = {
             "state_version": 1,
             "prs": {"1": {"last_terminal": "pr_merged"}},

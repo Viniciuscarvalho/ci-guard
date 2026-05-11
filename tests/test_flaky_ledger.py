@@ -1,13 +1,10 @@
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-from config import QUARANTINE_FAIL_THRESHOLD, QUARANTINE_RATE_THRESHOLD  # noqa: E402
-from flaky_ledger import get_quarantine_candidates, load, record_failure, record_pass, save  # noqa: E402
+from ci_guard.config import QUARANTINE_FAIL_THRESHOLD, QUARANTINE_RATE_THRESHOLD
+from ci_guard.ledger import get_quarantine_candidates, load, record_failure, record_pass, save
 
 
 class TestFlakyLedger(unittest.TestCase):
