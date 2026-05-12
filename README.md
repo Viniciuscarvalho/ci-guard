@@ -57,9 +57,13 @@ ci-guard makes your coding agent refuse to retry until a failure is _classified_
 
 ## Quick start
 
-**Step 1 — register the skill (once per machine)**
+**Step 1 — install (once per machine)**
 
-Pick the path for your agent:
+```bash
+pip install ci-guard
+```
+
+**Step 2 — register the skill for your agent (once per machine)**
 
 ```bash
 # Claude Code
@@ -73,15 +77,14 @@ ln -s /path/to/ci-guard ~/.opencode/skills/ci-guard
 
 # Any skills.sh-compatible runtime (auto-detects the right path)
 npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard
-
-# Gemini CLI / Cursor / other — no native skill path; paste SKILL.md content
-# into your agent context file (GEMINI.md, .cursorrules, etc.) instead.
 ```
 
-**Step 2 — bootstrap a repo (once per project, from repo root)**
+> In v0.7+: `ci-guard install-skill --agent claude` (or `codex`, `opencode`, `all`).
+
+**Step 3 — bootstrap a repo (once per project, from repo root)**
 
 ```bash
-python3 /path/to/ci-guard/scripts/bootstrap.py
+ci-guard init
 git add .ci-guard .gitignore && git commit -m "ci: bootstrap ci-guard"
 ```
 
@@ -89,13 +92,13 @@ git add .ci-guard .gitignore && git commit -m "ci: bootstrap ci-guard"
 
 ```bash
 # Snapshot a failing PR — always start here
-python3 .ci-guard/scripts/ci_watch.py --pr auto --once
+ci-guard watch --pr auto --once
 
 # Budget-safe retry (refuses on branch_failure or exhausted budget)
-python3 .ci-guard/scripts/ci_watch.py --pr auto --retry-failed-now
+ci-guard watch --pr auto --retry-failed-now
 
 # Verify a flaky green before merging
-python3 .ci-guard/scripts/ci_watch.py --pr auto --verify-flaky-green
+ci-guard watch --pr auto --verify-flaky-green
 ```
 
 → Full install details and agent matrix: [Installation](#installation)
@@ -172,16 +175,16 @@ A test crosses the quarantine threshold at `failure_count_30d ≥ 3` AND `flake_
 
 ### Using ci-guard as an engine
 
-`--watch` emits JSONL until a `terminal` value is set. Each snapshot's `actions` list tells the caller what to do next; ci-guard never executes mutations.
+`--stream` emits JSONL until a `terminal` value is set. Each snapshot's `actions` list tells the caller what to do next; ci-guard never executes mutations.
 
 ```python
 #!/usr/bin/env python3
-"""Minimal wrapper: consume ci-guard --watch JSONL and execute actions."""
+"""Minimal wrapper: consume ci-guard watch --stream JSONL and execute actions."""
 import json, subprocess, sys
 
 pr = sys.argv[1] if len(sys.argv) > 1 else "auto"
 proc = subprocess.Popen(
-    ["python3", ".ci-guard/scripts/ci_watch.py", "--pr", pr, "--watch"],
+    ["ci-guard", "watch", "--pr", pr, "--stream"],
     stdout=subprocess.PIPE, text=True,
 )
 for line in proc.stdout:
@@ -189,11 +192,9 @@ for line in proc.stdout:
     for action in snap.get("actions", []):
         a = action["action"]
         if a == "retry_failed_now":
-            subprocess.run(["python3", ".ci-guard/scripts/ci_watch.py",
-                            "--pr", pr, "--retry-failed-now"])
+            subprocess.run(["ci-guard", "watch", "--pr", pr, "--retry-failed-now"])
         elif a == "verify_flaky_green":
-            subprocess.run(["python3", ".ci-guard/scripts/ci_watch.py",
-                            "--pr", pr, "--verify-flaky-green"])
+            subprocess.run(["ci-guard", "watch", "--pr", pr, "--verify-flaky-green"])
         elif a == "stop":
             print(f"ci-guard: terminal={snap['terminal']}", flush=True)
             proc.terminate()
@@ -208,21 +209,32 @@ The complete JSON contract — every snapshot field, action shape, terminal valu
 
 ```
 ci-guard/
+├── pyproject.toml                    # Package metadata; ci-guard console_script entry point
 ├── SKILL.md                          # Playbook any agent reads at runtime
 ├── agents/
 │   └── openai.yaml                   # Codex / skills.sh interface manifest
-├── scripts/
-│   ├── bootstrap.py                  # One-time per-project setup (idempotent)
-│   ├── ci_watch.py                   # Snapshot CI state, classify, gate retries
-│   ├── classify_failure.py           # Heuristic log analysis
-│   ├── flaky_ledger.py               # Persistent flaky-test ledger CLI + Python API
-│   ├── action_runner.py              # GitHub CI consumer — posts PR comments / annotations
-│   └── config.py                     # Shared paths, budget defaults, config loader
+├── src/ci_guard/                     # Installable Python package (pip install ci-guard)
+│   ├── cli.py                        # Unified CLI — dispatches init/watch/classify/ledger/…
+│   ├── watch.py                      # Snapshot CI state, classify, gate retries
+│   ├── classify.py                   # Heuristic log analysis
+│   ├── ledger.py                     # Persistent flaky-test ledger CLI + Python API
+│   ├── actions.py                    # GitHub CI consumer — posts PR comments / annotations
+│   ├── init.py                       # Per-project bootstrap (called by ci-guard init)
+│   ├── config.py                     # Shared paths, budget defaults, config loader
+│   └── _providers/
+│       └── github.py                 # gh CLI wrapper (isolated for future multi-provider)
+├── scripts/                          # Backward-compat shims (deprecated; use ci-guard <sub>)
+│   ├── bootstrap.py                  # → ci-guard init
+│   ├── ci_watch.py                   # → ci-guard watch
+│   ├── classify_failure.py           # → ci-guard classify
+│   ├── flaky_ledger.py               # → ci-guard ledger
+│   ├── action_runner.py              # → ci-guard run-actions
+│   └── config.py                     # (imported by shims; not a standalone entry point)
 ├── docs/
 │   ├── agents.md                     # Supported agents and LLM compatibility
 │   ├── architecture.md               # Component diagram and data flow
-│   ├── github-actions.md             # deliver.yml + action_runner.py walkthrough
-│   ├── updating.md                   # Keeping skill and per-project scripts current
+│   ├── github-actions.md             # deliver.yml + actions.py walkthrough
+│   ├── updating.md                   # Keeping ci-guard current
 │   └── troubleshooting.md            # Common issues and fixes
 ├── references/
 │   ├── heuristics.md                 # Failure classification decision tree
@@ -230,10 +242,10 @@ ci-guard/
 │   ├── flaky-detection.md            # Ledger schema and verification protocol
 │   ├── setup.md                      # Per-project setup steps
 │   ├── ci-providers.md               # Adapting to GitLab / CircleCI / Buildkite
-│   └── wrapper-contract.md           # --watch JSON contract for wrapper authors
+│   └── wrapper-contract.md           # --stream JSON contract for wrapper authors
 ├── .github/workflows/
 │   ├── ci.yml                        # Matrix tests (Python 3.9 / 3.11 / 3.13)
-│   └── deliver.yml                   # workflow_run → ci_watch | action_runner (PR surfacing)
+│   └── deliver.yml                   # workflow_run → ci-guard watch | ci-guard run-actions
 └── assets/
     └── flaky-quarantine-template.md  # Issue body template
 ```
@@ -242,11 +254,17 @@ ci-guard/
 
 ## Installation
 
-### Step 1 — Register the skill (once per machine)
+### Step 1 — Install the package (once per machine)
 
-ci-guard works with any agent. Symlink the repo to the agent's skill path — source edits then reflect instantly without re-copying.
+```bash
+pip install ci-guard
+```
 
-| Agent                       | Skill path                                                                     |
+This installs the `ci-guard` command and all five subcommands: `init`, `watch`, `classify`, `ledger`, `run-actions`.
+
+### Step 2 — Register the skill for your agent (once per machine)
+
+| Agent                       | Command                                                                        |
 | --------------------------- | ------------------------------------------------------------------------------ |
 | Claude Code                 | `ln -s /path/to/ci-guard ~/.claude/skills/ci-guard`                            |
 | Codex                       | `ln -s /path/to/ci-guard ~/.codex/skills/ci-guard`                             |
@@ -254,114 +272,56 @@ ci-guard works with any agent. Symlink the repo to the agent's skill path — so
 | skills.sh (auto)            | `npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard` |
 | Gemini CLI / Cursor / other | no native path — see below                                                     |
 
+> In v0.7+: `ci-guard install-skill --agent claude` (or `codex`, `opencode`, `all`).
+
 **Gemini CLI, Cursor, Copilot, or any other agent with no native skill path:**
 paste the contents of `SKILL.md` into your agent context file
-(`.gemini/GEMINI.md`, `.cursorrules`, `AGENTS.md`, etc.). The scripts still
-live in `.ci-guard/scripts/` and work identically — only the playbook
-delivery changes.
+(`.gemini/GEMINI.md`, `.cursorrules`, `AGENTS.md`, etc.).
 
-See [`docs/agents.md`](docs/agents.md) for the full agent compatibility matrix and per-agent update commands.
+See [`docs/agents.md`](docs/agents.md) for the full agent compatibility matrix.
 
-### Step 2 — Bootstrap the repo (once per project)
+### Step 3 — Bootstrap the repo (once per project)
 
 From the project root:
 
 ```bash
-python3 /path/to/ci-guard/scripts/bootstrap.py
+ci-guard init
+git add .ci-guard .gitignore && git commit -m "ci: bootstrap ci-guard"
 ```
 
-The script is idempotent — re-running on an already-bootstrapped repo prints what is current without writing anything. Pass `--dry-run` to preview changes without writing.
-
-After it completes:
-
-```bash
-git add .ci-guard .gitignore
-git commit -m "ci: bootstrap ci-guard"
-```
-
-<details>
-<summary>Advanced: manual bootstrap steps</summary>
-
-```bash
-mkdir -p .ci-guard/scripts
-
-# Auto-detects your agent's path via $SKILLS_HOME; override SKILL_DIR if needed.
-SKILL_DIR="${SKILLS_HOME:-$HOME/.claude/skills}/ci-guard"
-cp "$SKILL_DIR/scripts/"*.py .ci-guard/scripts/
-chmod +x .ci-guard/scripts/*.py
-
-cat > .ci-guard/config.yml <<'YAML'
-# Per-project ci-guard config. Defaults shown; uncomment to override.
-# retries_per_job: 2
-# retries_per_pr: 5
-# minutes_per_pr: 90
-# watch_interval_seconds: 60
-YAML
-
-echo '{"version": 1, "tests": {}, "history": []}' > .ci-guard/flaky-ledger.json
-
-echo ".ci-guard/.watch-state.json" >> .gitignore
-
-git add .ci-guard .gitignore
-git commit -m "ci: bootstrap ci-guard"
-```
-
-</details>
+`ci-guard init` is idempotent — re-running on an already-bootstrapped repo is safe.
+Pass `--dry-run` to preview what would be written without touching any files.
 
 ### Prerequisites
 
-- Python 3.9+ (stdlib only — no `pip install` needed)
+- Python 3.9+
 - `gh` CLI authenticated against the repo's GitHub host (`gh auth status`)
 
 ### Updating
 
 → Full update guide: [`docs/updating.md`](docs/updating.md)
 
-**Skill update (once per machine)**
-
-| Install method            | Update command                                                              |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `ln -s` to a git clone    | `cd /path/to/ci-guard && git pull` — the symlink picks up changes instantly |
-| `npx skills add ...`      | `npx skills update ci-guard`                                                |
-| Manual copy of `SKILL.md` | Replace the file with the latest from the repo                              |
-
-**Per-project script update (once per repo, after a skill update)**
-
-The `.ci-guard/scripts/` files are a snapshot of the skill's scripts at bootstrap
-time. When the skill is updated, re-run bootstrap from the project root:
-
 ```bash
-python3 /path/to/ci-guard/scripts/bootstrap.py
-git add .ci-guard/scripts && git commit -m "chore: update ci-guard scripts to $(python3 .ci-guard/scripts/config.py 2>/dev/null || echo latest)"
+pip install --upgrade ci-guard
 ```
 
-**How to tell if your scripts are stale**
-
-`ci_watch.py` checks on every run and prints to stderr when a newer skill version
-is installed:
-
-```
-[ci-guard] scripts are stale (local 0.3.0, skill 0.4.0). Re-run bootstrap from the repo root:
-  python3 /path/to/ci-guard/scripts/bootstrap.py
-```
-
-The warning only appears when `skill version > local script version`. No output
-means your scripts are current.
+That's it. Because scripts now live in the installed package (not in `.ci-guard/scripts/`),
+upgrading the package is the only step needed — no per-project re-bootstrap required.
 
 ---
 
 ## Usage
 
-All commands run from the project root. The scripts use `gh` internally — no tokens to manage.
+All commands run from the project root. `ci-guard` uses `gh` internally — no tokens to manage.
 
 ### Snapshot a failing PR
 
 ```bash
 # Infer PR from current branch
-python3 .ci-guard/scripts/ci_watch.py --pr auto --once
+ci-guard watch --pr auto --once
 
 # Specific PR number
-python3 .ci-guard/scripts/ci_watch.py --pr 42 --once
+ci-guard watch --pr 42 --once
 ```
 
 Output:
@@ -387,52 +347,53 @@ Recommended next action: patch the branch_failure in test-unit before retrying t
 The only sanctioned way to retry. Refuses if any failure is `branch_failure` or budgets are exceeded.
 
 ```bash
-python3 .ci-guard/scripts/ci_watch.py --pr auto --retry-failed-now
+ci-guard watch --pr auto --retry-failed-now
 ```
 
 ### Verify a flaky green before merging
 
 ```bash
-python3 .ci-guard/scripts/ci_watch.py --pr auto --verify-flaky-green
+ci-guard watch --pr auto --verify-flaky-green
 ```
 
 Requires two consecutive greens on the same SHA before the check is trusted.
 
-### Continuous watch mode
+### Continuous stream mode
 
 ```bash
-python3 .ci-guard/scripts/ci_watch.py --pr auto --watch
+ci-guard watch --pr auto --stream
 ```
 
-Use only when explicitly monitoring a PR. For most diagnosis, `--once` is correct.
+Emits JSONL snapshots until a terminal state is reached. Use only when explicitly monitoring a PR; for most diagnosis, `--once` is correct.
 
 ### Classify an arbitrary run log
 
 ```bash
-python3 .ci-guard/scripts/classify_failure.py --run-id <run-id>
-python3 .ci-guard/scripts/classify_failure.py --log-file <path>
+ci-guard classify --run-id <run-id>
+ci-guard classify --log-file <path>
+ci-guard classify --stdin   # pipe raw log text
 ```
 
 ### Ledger operations
 
 ```bash
 # Query a specific test
-python3 .ci-guard/scripts/flaky_ledger.py query --test "tests/auth/test_login.py::test_oauth"
+ci-guard ledger query --test "tests/auth/test_login.py::test_oauth"
 
 # List quarantine candidates
-python3 .ci-guard/scripts/flaky_ledger.py quarantine-candidates
+ci-guard ledger quarantine-candidates
 
 # Mark a test quarantined after filing the issue
-python3 .ci-guard/scripts/flaky_ledger.py set-status \
+ci-guard ledger set-status \
     --test "tests/auth/test_login.py::test_oauth" \
     --status quarantined \
     --issue-url "https://github.com/org/repo/issues/42"
 
 # Remove stale entries (no failures in 60 days, not quarantined)
-python3 .ci-guard/scripts/flaky_ledger.py prune --older-than 60
+ci-guard ledger prune --older-than 60
 
 # Record a failure manually (e.g. from CI, see below)
-python3 .ci-guard/scripts/flaky_ledger.py record-failure \
+ci-guard ledger record-failure \
     --test "tests/auth/test_login.py::test_oauth" --sha abc1234 --run-id 9876543
 ```
 
@@ -450,7 +411,8 @@ Add to your test workflow's after-tests step:
 - name: Update flaky ledger
   if: always()
   run: |
-    python3 .ci-guard/scripts/flaky_ledger.py record-failure \
+    pip install ci-guard --quiet
+    ci-guard ledger record-failure \
       --test "${TEST_ID}" \
       --sha "${{ github.sha }}" \
       --run-id "${{ github.run_id }}" || true
@@ -465,7 +427,8 @@ Add as a required status check or a standalone workflow step:
 ```yaml
 - name: Quarantine guard
   run: |
-    candidates=$(python3 .ci-guard/scripts/flaky_ledger.py quarantine-candidates)
+    pip install ci-guard --quiet
+    candidates=$(ci-guard ledger quarantine-candidates)
     if [ -n "$(echo "$candidates" | jq -r '.[]' 2>/dev/null)" ]; then
       echo "::warning::Quarantine candidates exist. Review before merging."
       echo "$candidates"
@@ -474,7 +437,7 @@ Add as a required status check or a standalone workflow step:
 
 ### Hook 3 — Surface classifications on the PR page
 
-The `deliver.yml` workflow (included in this repo) wires `ci_watch --watch` into a
+The `deliver.yml` workflow (included in this repo) wires `ci-guard watch --stream` into a
 `workflow_run` trigger so classifications appear on the PR page automatically — no manual
 invocation needed.
 
@@ -498,15 +461,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Install ci-guard
+        run: pip install ci-guard
       - name: Watch and guard
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 .ci-guard/scripts/ci_watch.py --pr auto --watch | \
-          python3 .ci-guard/scripts/action_runner.py
+          ci-guard watch --pr auto --stream | ci-guard run-actions
 ```
 
-`action_runner.py` consumes the JSONL stream and posts:
+`ci-guard run-actions` consumes the JSONL stream and posts:
 
 - `::error::` / `::warning::` **workflow annotations** visible in the job log and Files tab.
 - **PR comments** on `branch_failure` (do-not-retry warning), `unknown` failure (manual
@@ -550,7 +514,7 @@ When a test crosses the threshold (`failure_count_30d ≥ 3` AND `flake_rate ≥
 5. Mark the ledger entry quarantined:
 
    ```bash
-   python3 .ci-guard/scripts/flaky_ledger.py set-status \
+   ci-guard ledger set-status \
        --test "<test-id>" --status quarantined \
        --issue-url "https://github.com/org/repo/issues/<n>"
    ```
@@ -567,10 +531,10 @@ The scripts target GitHub Actions by default. The provider interface is a single
 
 ## Dependencies
 
-- Python 3.9+ (stdlib only)
+- Python 3.9+ (`pip install ci-guard` — stdlib only, no transitive deps)
 - `gh` CLI, authenticated against the repo's GitHub host
 
-No `pip install`. No extra services. Portable across any environment that runs Python and has `gh`.
+No extra services. Portable across any environment that runs Python and has `gh`.
 
 ---
 
