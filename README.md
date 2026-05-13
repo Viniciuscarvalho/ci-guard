@@ -546,11 +546,12 @@ No extra services. Portable across any environment that runs Python and has `gh`
 
 ## Documentation
 
-| File                                                 | Contents                                                                  |
-| ---------------------------------------------------- | ------------------------------------------------------------------------- |
-| [`docs/agents.md`](docs/agents.md)                   | Supported agents, LLM compatibility, full install matrix                  |
-| [`docs/architecture.md`](docs/architecture.md)       | How the pieces fit together (skill → scripts → ledger → PR page)          |
-| [`docs/github-actions.md`](docs/github-actions.md)   | PR-page surfacing via `deliver.yml` + `action_runner.py`                  |
-| [`docs/updating.md`](docs/updating.md)               | Keeping the skill and per-project scripts current                         |
-| [`docs/troubleshooting.md`](docs/troubleshooting.md) | Common issues and fixes                                                   |
-| [`references/`](references/)                         | Heuristics, cost rationale, ledger schema, wrapper contract, CI providers |
+| File                                                       | Contents                                                                  |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`docs/agents.md`](docs/agents.md)                         | Supported agents, LLM compatibility, full install matrix                  |
+| [`docs/architecture.md`](docs/architecture.md)             | How the pieces fit together (skill → scripts → ledger → PR page)          |
+| [`docs/github-actions.md`](docs/github-actions.md)         | PR-page surfacing via `deliver.yml` + `action_runner.py`                  |
+| [`docs/updating.md`](docs/updating.md)                     | Keeping the skill and per-project scripts current                         |
+| [`docs/troubleshooting.md`](docs/troubleshooting.md)       | Common issues and fixes                                                   |
+| [`docs/testing-boss-audit.md`](docs/testing-boss-audit.md) | testing-boss doctrine audit: pass/gap verdicts for tests and skill        |
+| [`references/`](references/)                               | Heuristics, cost rationale, ledger schema, wrapper contract, CI providers |
