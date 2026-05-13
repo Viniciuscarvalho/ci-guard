@@ -24,13 +24,23 @@ Path: `.ci-guard/flaky-ledger.json` (committed to the repo).
       "quarantined_at": null,
       "quarantine_issue_url": null,
       "events": [
-        {"kind": "fail", "at": "2026-04-12T03:11:02Z", "sha": "abc1234", "run_id": "1234567"},
-        {"kind": "pass", "at": "2026-04-12T03:18:40Z", "sha": "abc1234", "run_id": "1234589"}
+        {
+          "kind": "fail",
+          "at": "2026-04-12T03:11:02Z",
+          "sha": "abc1234",
+          "run_id": "1234567",
+        },
+        {
+          "kind": "pass",
+          "at": "2026-04-12T03:18:40Z",
+          "sha": "abc1234",
+          "run_id": "1234589",
+        },
         // ...
-      ]
-    }
+      ],
+    },
   },
-  "history": []
+  "history": [],
 }
 ```
 
@@ -77,9 +87,9 @@ The verification rerun is a small cost — typically under a minute on a
 single check — to catch the "passed once by luck" case that produces
 production incidents from green CI.
 
-### When verification is *not* needed
+### When verification is _not_ needed
 
-- A check that was failing transitions to green after a *new commit*. The new
+- A check that was failing transitions to green after a _new commit_. The new
   commit might have fixed a real bug; trust the green and let the dev push
   more if the fix was incomplete.
 - A check that's flagged `infra_flake` and not in the ledger.
@@ -89,13 +99,13 @@ production incidents from green CI.
 
 ## Quarantine threshold
 
-A test becomes a *quarantine candidate* when both:
+A test becomes a _quarantine candidate_ when both:
 
 - `failure_count_30d >= 3`
 - `flake_rate >= 0.05` (5%)
 
 These are intentionally lenient. A test that fails 3 times out of 100 (3%
-flake rate) does *not* qualify — it might just be unlucky. A test that fails
+flake rate) does _not_ qualify — it might just be unlucky. A test that fails
 3 out of 30 (10% flake rate) does — it's costing real time on real PRs.
 
 ### What "quarantine" means
@@ -103,20 +113,20 @@ flake rate) does *not* qualify — it might just be unlucky. A test that fails
 Quarantining a test = adding a skip-pragma so it does not run in CI, plus
 opening a tracking issue so it doesn't get forgotten. Examples per framework:
 
-| Framework | Skip pragma |
-|---|---|
-| pytest | `@pytest.mark.skip(reason="ci-guard quarantine: <issue-url>")` |
+| Framework     | Skip pragma                                                       |
+| ------------- | ----------------------------------------------------------------- |
+| pytest        | `@pytest.mark.skip(reason="ci-guard quarantine: <issue-url>")`    |
 | Jest / Vitest | `it.skip("oauth redirect", ...)` with a comment linking the issue |
-| Go test | `t.Skip("ci-guard quarantine: <issue-url>")` |
-| RSpec | `it "...", skip: "ci-guard quarantine: <issue-url>"` |
-| JUnit 5 | `@Disabled("ci-guard quarantine: <issue-url>")` |
-| Cargo test | `#[ignore = "ci-guard quarantine: <issue-url>"]` |
+| Go test       | `t.Skip("ci-guard quarantine: <issue-url>")`                      |
+| RSpec         | `it "...", skip: "ci-guard quarantine: <issue-url>"`              |
+| JUnit 5       | `@Disabled("ci-guard quarantine: <issue-url>")`                   |
+| Cargo test    | `#[ignore = "ci-guard quarantine: <issue-url>"]`                  |
 
 The issue body should use `assets/flaky-quarantine-template.md`. After the
 issue is filed, mark the ledger entry quarantined:
 
 ```bash
-python3 .ci-guard/scripts/flaky_ledger.py set-status \
+ci-guard ledger set-status \
     --test "tests/auth/test_login.py::test_oauth_redirect" \
     --status quarantined \
     --issue-url "https://github.com/org/repo/issues/1234"
@@ -124,7 +134,7 @@ python3 .ci-guard/scripts/flaky_ledger.py set-status \
 
 ### What quarantine does NOT do
 
-- It does not delete or modify the test file. Skipping is a *signal*, not a
+- It does not delete or modify the test file. Skipping is a _signal_, not a
   fix — the test stays in the codebase.
 - It does not block the PR. The point is to stop the test from costing minutes
   on every PR while the underlying issue is investigated.
@@ -134,7 +144,7 @@ python3 .ci-guard/scripts/flaky_ledger.py set-status \
 ## Aging out fixed tests
 
 `flaky_ledger.py prune --older-than 60` removes entries with no failures in
-the last 60 days *and* status != `quarantined`. The 60-day default is
+the last 60 days _and_ status != `quarantined`. The 60-day default is
 deliberate — short enough that the ledger doesn't grow without bound, long
 enough that a flaky that disappears for a sprint isn't immediately forgotten.
 
@@ -150,7 +160,7 @@ forgotten.
   have at least one prior failure event in the ledger. (The `record-pass`
   command happily creates new entries, but the calling code in
   `ci_watch.py` only records passes for tests that are already tracked.)
-- **Counting reruns as new events.** A retry is part of the *same* CI cycle;
+- **Counting reruns as new events.** A retry is part of the _same_ CI cycle;
   recording fail-then-pass from a single rerun would inflate the flake rate.
   Only record one event per (test, SHA) pair.
 - **Manually editing the ledger.** It's JSON, so you can — but the rolling

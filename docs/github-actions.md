@@ -11,7 +11,7 @@ Add to your test workflow's after-tests step so every failure is logged to the l
 - name: Update flaky ledger
   if: always()
   run: |
-    python3 .ci-guard/scripts/flaky_ledger.py record-failure \
+    ci-guard ledger record-failure \
       --test "${TEST_ID}" \
       --sha "${{ github.sha }}" \
       --run-id "${{ github.run_id }}" || true
@@ -27,7 +27,7 @@ Add as a required status check or a standalone step after tests run:
 ```yaml
 - name: Quarantine guard
   run: |
-    candidates=$(python3 .ci-guard/scripts/flaky_ledger.py quarantine-candidates)
+    candidates=$(ci-guard ledger quarantine-candidates)
     if [ -n "$(echo "$candidates" | jq -r '.[]' 2>/dev/null)" ]; then
       echo "::warning::Quarantine candidates exist. Review before merging."
       echo "$candidates"
@@ -113,9 +113,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 .ci-guard/scripts/ci_watch.py \
-            --pr ${{ steps.pr.outputs.number }} --watch | \
-          python3 .ci-guard/scripts/action_runner.py
+          ci-guard watch \
+            --pr ${{ steps.pr.outputs.number }} --stream | \
+          ci-guard run-actions
 ```
 
 ### Required permissions

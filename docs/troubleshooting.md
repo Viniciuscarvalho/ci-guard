@@ -44,16 +44,16 @@ desync if you edit them directly. Always use the CLI:
 
 ```bash
 # Record a failure
-python3 .ci-guard/scripts/flaky_ledger.py record-failure \
+ci-guard ledger record-failure \
     --test "<test-id>" --sha <sha> --run-id <run-id>
 
 # Mark a test quarantined
-python3 .ci-guard/scripts/flaky_ledger.py set-status \
+ci-guard ledger set-status \
     --test "<test-id>" --status quarantined \
     --issue-url "https://github.com/org/repo/issues/<n>"
 
 # Remove stale entries
-python3 .ci-guard/scripts/flaky_ledger.py prune --older-than 60
+ci-guard ledger prune --older-than 60
 ```
 
 If the file is already corrupt, restore it from git history

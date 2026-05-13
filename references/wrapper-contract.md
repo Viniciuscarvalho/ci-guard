@@ -15,7 +15,7 @@ until `terminal` is non-null, then exits with the code described below.
 Consumers must iterate lines and parse each as JSON.
 
 ```
-python3 .ci-guard/scripts/ci_watch.py --pr <n|auto|url> --watch
+ci-guard watch --pr <n|auto|url> --stream
 ```
 
 ---
@@ -82,7 +82,7 @@ needed; the next snapshot will arrive after `watch_interval_seconds`.
 Budget allows retrying the current failures. Invoke:
 
 ```
-python3 .ci-guard/scripts/ci_watch.py --pr <n> --retry-failed-now
+ci-guard watch --pr <n> --retry-failed-now
 ```
 
 This is the only sanctioned retry path — calling `gh run rerun` directly
@@ -104,7 +104,7 @@ The named checks flipped from failing to green but appear in the flaky ledger.
 A single green is not trustworthy. Trigger a verification rerun:
 
 ```
-python3 .ci-guard/scripts/ci_watch.py --pr <n> --verify-flaky-green
+ci-guard watch --pr <n> --verify-flaky-green
 ```
 
 Two consecutive greens on the same SHA are required before the check is

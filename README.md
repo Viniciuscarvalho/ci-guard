@@ -260,7 +260,7 @@ ci-guard/
 pip install ci-guard
 ```
 
-This installs the `ci-guard` command and all five subcommands: `init`, `watch`, `classify`, `ledger`, `run-actions`.
+This installs the `ci-guard` command and all six subcommands: `init`, `watch`, `classify`, `ledger`, `gate`, `run-actions`.
 
 ### Step 2 — Register the skill for your agent (once per machine)
 

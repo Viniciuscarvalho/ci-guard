@@ -116,7 +116,7 @@ In your test workflow's "after tests" step:
 - name: Update flaky ledger
   if: always()
   run: |
-    python3 .ci-guard/scripts/flaky_ledger.py record-failure \
+    ci-guard ledger record-failure \
       --test "${TEST_ID}" --sha "${{ github.sha }}" --run-id "${{ github.run_id }}" || true
 ```
 
@@ -131,9 +131,9 @@ A required status check that runs:
 ```yaml
 - name: Quarantine guard
   run: |
-    if [ -n "$(python3 .ci-guard/scripts/flaky_ledger.py quarantine-candidates | jq -r '.[]')" ]; then
+    if [ -n "$(ci-guard ledger quarantine-candidates | jq -r '.[]')" ]; then
       echo "::warning::Quarantine candidates exist; review before merging."
-      python3 .ci-guard/scripts/flaky_ledger.py quarantine-candidates
+      ci-guard ledger quarantine-candidates
     fi
 ```
 
@@ -163,7 +163,7 @@ seed the ledger directly:
 
 ```bash
 for test_id in tests/foo.py::test_bar tests/baz.py::test_qux; do
-  python3 .ci-guard/scripts/flaky_ledger.py record-failure --test "$test_id"
+  ci-guard ledger record-failure --test "$test_id"
 done
 ```
 
