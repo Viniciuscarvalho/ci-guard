@@ -39,11 +39,18 @@ jobs:
             echo "number=$PR" >> "$GITHUB_OUTPUT"
           fi
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install ci-guard
+        run: pip install -e .
+
       - name: Watch and guard
         if: steps.pr.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 .ci-guard/scripts/ci_watch.py \
-            --pr ${{ steps.pr.outputs.number }} --watch | \
-          python3 .ci-guard/scripts/action_runner.py
+          ci-guard watch \
+            --pr ${{ steps.pr.outputs.number }} --stream | \
+          ci-guard run-actions
