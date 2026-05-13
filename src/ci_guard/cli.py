@@ -47,6 +47,15 @@ def main() -> None:
     from ci_guard import ledger as _ledger
     _ledger.build_parser(sub)
 
+    # gate
+    g = sub.add_parser(
+        "gate",
+        help="Quality-gate check: exit 0=green, 1=blocked, 2=retryable, 3=exhausted.",
+    )
+    g.add_argument("--pr", default="auto", help="PR number, URL, or 'auto' (default).")
+    g.add_argument("--json", dest="json_output", action="store_true",
+                   help="Emit machine-readable JSON instead of a human report.")
+
     # run-actions
     sub.add_parser("run-actions",
                    help="Consume ci-guard watch JSONL and post PR comments/annotations.")
@@ -109,6 +118,13 @@ def _dispatch(args) -> int:
     if cmd == "ledger":
         from ci_guard import ledger as _ledger
         return _ledger.dispatch(args)
+
+    if cmd == "gate":
+        from ci_guard.gate import cmd_gate
+        from ci_guard._providers.github import resolve_pr as _resolve_pr
+        from ci_guard.watch import repo_root as _repo_root
+        return cmd_gate(_resolve_pr(args.pr), _repo_root(),
+                        json_output=getattr(args, "json_output", False))
 
     if cmd == "run-actions":
         from ci_guard.actions import run
