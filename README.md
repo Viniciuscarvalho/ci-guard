@@ -3,10 +3,15 @@
 </p>
 
 <p align="center">
-  <strong>Stop burning CI minutes on blind retries. Classify every failure before touching rerun.</strong>
+  <strong>Cut up to 70% of wasted CI minutes and stop AI coding agents from spamming doomed reruns.</strong>
+  <br>
+  <em>The diagnostic circuit breaker and cost-guard layer for GitHub Actions, Claude Code, Codex, and autonomous agents.</em>
 </p>
 
 <p align="center">
+  <a href="https://github.com/Viniciuscarvalho/ci-guard/stargazers">
+    <img src="https://img.shields.io/github/stars/Viniciuscarvalho/ci-guard?style=social" alt="GitHub Stars">
+  </a>
   <a href="https://pypi.org/project/ci-guard-check/">
     <img src="https://img.shields.io/pypi/v/ci-guard-check.svg" alt="PyPI version">
   </a>
@@ -26,13 +31,7 @@
     <img src="https://img.shields.io/badge/python-3.9%2B-green.svg" alt="Python 3.9+">
   </a>
   <a href="https://github.com/Viniciuscarvalho/ci-guard">
-    <img src="https://img.shields.io/badge/works%20with-Claude%20Code-8b5cf6.svg" alt="Works with Claude Code">
-  </a>
-  <a href="https://github.com/Viniciuscarvalho/ci-guard">
-    <img src="https://img.shields.io/badge/CI-GitHub%20Actions-black.svg" alt="GitHub Actions">
-  </a>
-  <a href="https://github.com/sponsors/Viniciuscarvalho">
-    <img src="https://img.shields.io/badge/sponsor-♥-ea4aaa.svg" alt="Sponsor">
+    <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%7C%20Codex-8b5cf6.svg" alt="Works with Claude Code and Codex">
   </a>
   <a href="https://skills.sh/openai/codex/ci-guard">
     <img src="https://img.shields.io/badge/Try%20on-skills.sh-orange.svg" alt="Try on skills.sh">
@@ -40,30 +39,44 @@
 </p>
 
 <p align="center">
-  <code>failure classification</code> · <code>flaky ledger</code> · <code>cost guard</code> · <code>verify greens</code> · <code>quarantine</code> · <code>GitHub Actions</code>
+  <code>⚡ 1-Click GitHub Action</code> · <code>🚫 0 Blind Retries</code> · <code>📉 Cut Wasted CI Minutes</code> · <code>💰 PR Savings Report</code> · <code>🧪 Flaky Ledger</code> · <code>0️⃣ Zero LLM API Keys</code>
 </p>
 
 ---
 
-Protects your CI from two failure modes that silently drain money and hide bugs:
+## 🎯 The Promise: Stop Burning CI Minutes on Doomed Retries
 
-1. **Blind retries** — a check fails, someone hits "rerun failed jobs", it passes, the PR merges. The flaky test never gets fixed and burns minutes on every future PR.
-2. **Trusting a single green** — a known-flaky test passes once after several failures. The PR merges. Production breaks.
+Autonomous coding agents (like **Claude Code**, **OpenAI Codex**, **Cursor**, **Devin**, and **opencode**) are transforming software development—but they come with a costly blind spot: **they blindly rerun failing CI builds**.
 
-ci-guard makes your coding agent refuse to retry until a failure is _classified_, and refuse to trust a green on a known-flaky test until it is _verified_.
+When a check fails, agents and developers instinctively trigger *"Rerun failed jobs"*, hoping for a green. If the failure was caused by a syntax error, broken import, or failing unit test, **that rerun is 100% doomed**. It burns 15 to 45 minutes of expensive runner compute for zero reason.
+
+Even worse is the **"lucky green" trap**: a flaky test fails twice, passes on the third attempt by coincidence, and gets merged straight into `main`—shipping regressions directly to production.
+
+### What `ci-guard` gives you:
+
+- 🛑 **Refuses to rerun broken code:** Classifies failures in seconds (`branch_failure`, `infra_flake`, `test_flake`, `dependency_failure`). If it's a code bug, retries are strictly blocked until a patch is committed.
+- ⏱️ **Cuts up to 70% of wasted CI minutes:** Kills the blind retry loop. Saves dozens of runner minutes on every single PR.
+- 🎯 **Never merge a lucky green:** Known flaky tests that turn green are marked suspicious and require a consecutive verification pass before merging.
+- 💰 **Visualizes ROI on every PR:** Posts an automated **Savings & Efficiency Card** directly into your PR comments, tracking exact minutes and reruns saved.
+- 🆓 **Zero LLM cost or API keys:** Runs 100% locally or in GitHub Actions via deterministic Python stdlib heuristics. Instant analysis, 0 tokens billed.
 
 ---
 
-> **Compatibility** — ci-guard's Python scripts call no LLM and require no API key.
-> Your coding agent reads `SKILL.md` and drives the scripts via your shell. It works
-> with Claude Code, OpenAI Codex, opencode, skills.sh runtimes, and any agent that
-> can paste `SKILL.md` into its context (Gemini CLI, Cursor, Copilot, etc.).
->
-> → See [`docs/agents.md`](docs/agents.md) for the full agent matrix and install paths.
+## ⚖️ Before vs. After ci-guard
 
-## Quick start
+| Scenario | Without ci-guard ❌ | With ci-guard 🛡️ |
+|:---|:---|:---|
+| **Syntax / Unit Test Failure** | Agent/Dev loops `rerun` 3–5 times hoping for green (**~45 min wasted**) | **Halted instantly (`branch_failure`)**. Agent told to patch code. (**0 min wasted**) |
+| **Flaky Test Pass** | Fails twice, passes once by luck → merged → breaks `main` | Marked as `test_flake`. Mandates 2 back-to-back passes to verify. |
+| **Infra / DNS Timeout** | Developer dives into 5,000 lines of raw logs | Detected as `infra_flake`. Automatically retried once within budget. |
+| **Runaway Agent Loop** | Agent burns entire team monthly GitHub Actions quota overnight | Hard budget caps per PR and per job (e.g. max 5 retries / 90 min). |
+| **Team Cost Visibility** | Zero visibility into how much flaky CI costs the company | Real-time PR comments show **exact minutes saved** + 30-day flake rate. |
 
-### ⚡ 1-Click GitHub Action (Zero setup)
+---
+
+## ⚡ Quick Start (Under 60 Seconds)
+
+### Option A — 1-Click GitHub Action (Recommended for CI & Teams)
 
 Add `ci-guard` directly into any GitHub Actions PR workflow:
 
@@ -85,50 +98,31 @@ Or run as an automated delivery watcher that retries flakes, halts on branch fai
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-### 💻 Local / Agent Quick Start
+### Option B — AI Coding Agent Skill (Claude Code, Codex, opencode)
 
-**Step 1 — install (once per machine)**
+Give your agent the `ci-guard` skill so it refuses to hit rerun blindly:
 
 ```bash
+# 1. Install CLI
 pip install ci-guard-check
-```
 
-**Step 2 — register the skill for your agent (once per machine)**
+# 2. Register skill (choose your agent)
+ln -s /path/to/ci-guard ~/.claude/skills/ci-guard    # Claude Code
+ln -s /path/to/ci-guard ~/.codex/skills/ci-guard     # Codex
+ln -s /path/to/ci-guard ~/.opencode/skills/ci-guard  # opencode
 
-```bash
-# Claude Code
-ln -s /path/to/ci-guard ~/.claude/skills/ci-guard
-
-# Codex
-ln -s /path/to/ci-guard ~/.codex/skills/ci-guard
-
-# opencode
-ln -s /path/to/ci-guard ~/.opencode/skills/ci-guard
-
-# Any skills.sh-compatible runtime (auto-detects the right path)
+# Any skills.sh runtime:
 npx skills add https://github.com/Viniciuscarvalho/ci-guard --skill ci-guard
 ```
 
-> In v0.7+: `ci-guard install-skill --agent claude` (or `codex`, `opencode`, `all`).
-
-**Step 3 — bootstrap a repo (once per project, from repo root)**
-
-```bash
-ci-guard init
-git add .ci-guard .gitignore && git commit -m "ci: bootstrap ci-guard"
-```
-
-**Done. Core commands:**
+### Option C — Local CLI
 
 ```bash
 # Snapshot a failing PR — always start here
 ci-guard watch --pr auto --once
 
-# Generate / post PR savings report
+# Post savings report directly to PR comment
 ci-guard report --pr auto --comment
-
-# Quality-gate check
-ci-guard gate --pr auto
 
 # Budget-safe retry (refuses on branch_failure or exhausted budget)
 ci-guard watch --pr auto --retry-failed-now
@@ -136,9 +130,6 @@ ci-guard watch --pr auto --retry-failed-now
 # Verify a flaky green before merging
 ci-guard watch --pr auto --verify-flaky-green
 ```
-
-→ Full install details and agent matrix: [Installation](#installation)
-→ All commands with output examples: [Usage](#usage)
 
 ---
 
@@ -617,3 +608,12 @@ No extra services. Portable across any environment that runs Python and has `gh`
 | [`docs/troubleshooting.md`](docs/troubleshooting.md)       | Common issues and fixes                                                   |
 | [`docs/testing-boss-audit.md`](docs/testing-boss-audit.md) | testing-boss doctrine audit: pass/gap verdicts for tests and skill        |
 | [`references/`](references/)                               | Heuristics, cost rationale, ledger schema, wrapper contract, CI providers |
+
+---
+
+## ⭐ Star the project
+
+If `ci-guard` saved your team CI minutes, cut your GitHub Actions bill, or stopped your AI coding agent from spiraling into useless reruns, please give it a star on GitHub! It helps more developers and teams discover the project.
+
+[⭐ Star on GitHub](https://github.com/Viniciuscarvalho/ci-guard) · [🐛 Report an Issue](https://github.com/Viniciuscarvalho/ci-guard/issues) · [💡 Discussions](https://github.com/Viniciuscarvalho/ci-guard/discussions)
+
