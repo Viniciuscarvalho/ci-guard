@@ -66,7 +66,7 @@ def check_script_freshness() -> str | None:
     if _version_tuple(skill_version) > _version_tuple(SCRIPT_VERSION):
         return (
             f"[ci-guard] scripts are stale (local {SCRIPT_VERSION}, "
-            f"skill {skill_version}). Run: pip install --upgrade ci-guard"
+            f"skill {skill_version}). Run: pip install --upgrade ci-guard-check"
         )
     return None
 

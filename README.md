@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/ci-guard/">
-    <img src="https://img.shields.io/pypi/v/ci-guard.svg" alt="PyPI version">
+  <a href="https://pypi.org/project/ci-guard-check/">
+    <img src="https://img.shields.io/pypi/v/ci-guard-check.svg" alt="PyPI version">
   </a>
   <a href="https://github.com/marketplace/actions/ci-guard">
     <img src="https://img.shields.io/badge/GitHub%20Action-1--Click-blue.svg?logo=githubactions" alt="GitHub Action: 1-Click">
@@ -90,7 +90,7 @@ Or run as an automated delivery watcher that retries flakes, halts on branch fai
 **Step 1 — install (once per machine)**
 
 ```bash
-pip install ci-guard
+pip install ci-guard-check
 ```
 
 **Step 2 — register the skill for your agent (once per machine)**
@@ -280,7 +280,7 @@ ci-guard/
 ├── SKILL.md                          # Playbook any agent reads at runtime
 ├── agents/
 │   └── openai.yaml                   # Codex / skills.sh interface manifest
-├── src/ci_guard/                     # Installable Python package (pip install ci-guard)
+├── src/ci_guard/                     # Installable Python package (pip install ci-guard-check)
 │   ├── cli.py                        # Unified CLI — dispatches init/watch/classify/ledger/…
 │   ├── watch.py                      # Snapshot CI state, classify, gate retries
 │   ├── classify.py                   # Heuristic log analysis
@@ -324,7 +324,7 @@ ci-guard/
 ### Step 1 — Install the package (once per machine)
 
 ```bash
-pip install ci-guard
+pip install ci-guard-check
 ```
 
 This installs the `ci-guard` command and all six subcommands: `init`, `watch`, `classify`, `ledger`, `gate`, `run-actions`.
@@ -369,7 +369,7 @@ Pass `--dry-run` to preview what would be written without touching any files.
 → Full update guide: [`docs/updating.md`](docs/updating.md)
 
 ```bash
-pip install --upgrade ci-guard
+pip install --upgrade ci-guard-check
 ```
 
 That's it. Because scripts now live in the installed package (not in `.ci-guard/scripts/`),
@@ -478,7 +478,7 @@ Add to your test workflow's after-tests step:
 - name: Update flaky ledger
   if: always()
   run: |
-    pip install ci-guard --quiet
+    pip install ci-guard-check --quiet
     ci-guard ledger record-failure \
       --test "${TEST_ID}" \
       --sha "${{ github.sha }}" \
@@ -494,7 +494,7 @@ Add as a required status check or a standalone workflow step:
 ```yaml
 - name: Quarantine guard
   run: |
-    pip install ci-guard --quiet
+    pip install ci-guard-check --quiet
     candidates=$(ci-guard ledger quarantine-candidates)
     if [ -n "$(echo "$candidates" | jq -r '.[]' 2>/dev/null)" ]; then
       echo "::warning::Quarantine candidates exist. Review before merging."
@@ -593,7 +593,7 @@ The scripts target GitHub Actions by default. The provider interface is a single
 
 ## Dependencies
 
-- Python 3.9+ (`pip install ci-guard` — stdlib only, no transitive deps)
+- Python 3.9+ (`pip install ci-guard-check` — stdlib only, no transitive deps)
 - `gh` CLI, authenticated against the repo's GitHub host
 
 No extra services. Portable across any environment that runs Python and has `gh`.

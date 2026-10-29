@@ -3,7 +3,7 @@
 ## Update the package (once per machine)
 
 ```bash
-pip install --upgrade ci-guard
+pip install --upgrade ci-guard-check
 ```
 
 Because all logic lives in the installed package — not in per-project copies —
@@ -35,12 +35,12 @@ ci-guard --version
 
 ## Updating in CI (deliver.yml)
 
-`deliver.yml` runs `pip install ci-guard` at workflow start, so CI always uses the
+`deliver.yml` runs `pip install ci-guard-check` at workflow start, so CI always uses the
 latest published version. To pin a specific version:
 
 ```yaml
 - name: Install ci-guard
-  run: pip install "ci-guard==0.5.0"
+  run: pip install "ci-guard-check==0.5.0"
 ```
 
 ## Migrating from the pre-v0.5 bootstrap layout

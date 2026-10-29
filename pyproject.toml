@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ci-guard"
+name = "ci-guard-check"
 version = "0.5.0"
 description = "Guard CI from wasted minutes by classifying failures and maintaining a per-repo flaky-test ledger."
 readme = "README.md"
