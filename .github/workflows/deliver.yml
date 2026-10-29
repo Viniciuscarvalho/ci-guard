@@ -41,9 +41,8 @@ jobs:
 
       - name: Watch and guard
         if: steps.pr.outputs.skip != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python3 .ci-guard/scripts/ci_watch.py \
-            --pr ${{ steps.pr.outputs.number }} --watch | \
-          python3 .ci-guard/scripts/action_runner.py
+        uses: ./
+        with:
+          mode: guard
+          pr: ${{ steps.pr.outputs.number }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

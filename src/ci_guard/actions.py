@@ -59,14 +59,54 @@ def _format_report(snap: dict) -> str:
     checks = snap.get("checks", [])
     qc = snap.get("quarantine_candidates", [])
 
-    lines: list[str] = [f"**ci-guard** — PR #{pr} | `{sha}`\n"]
-
     failed = [
         c for c in checks
         if c.get("conclusion") in {"failure", "cancelled", "timed_out"}
     ]
+
+    retries_used = cost.get("retries_used_pr", 0)
+    retries_max = cost.get("retries_max_pr", "?")
+    minutes = cost.get("minutes_spent", 0)
+    minutes_max = cost.get("minutes_max", "?")
+
+    blocked_failures = [
+        c for c in failed
+        if c.get("classification", {}).get("category") in {"branch_failure", "unknown"}
+        or c.get("classification", {}).get("category") not in {"infra_flake", "test_flake", "dependency_failure"}
+    ]
+    retries_avoided = cost.get("retries_avoided_pr")
+    if retries_avoided is None or retries_avoided == 0:
+        retries_avoided = len(blocked_failures)
+
+    minutes_saved = cost.get("minutes_saved")
+    if minutes_saved is None or minutes_saved == 0:
+        minutes_saved = sum(max(1, round((c.get("duration_seconds") or 300) / 60)) for c in blocked_failures)
+
+    emoji = _TERMINAL_EMOJI.get(terminal, "")
+
+    lines: list[str] = [
+        "<!-- ci-guard-report -->",
+        f"## 🛡️ **ci-guard** — PR #{pr} | `{sha}`\n",
+        "### 💰 Savings & Efficiency Summary",
+        "| Metric | Result | Context |",
+        "|:---|:---:|:---|",
+    ]
+
+    if minutes_saved > 0 or retries_avoided > 0:
+        lines.append(f"| ⏱️ **CI Minutes Saved** | **~{minutes_saved} min** | Avoided running doomed reruns |")
+        lines.append(f"| 🚫 **Blind Retries Avoided** | **{retries_avoided}** | Blocked retry on code/branch errors |")
+    else:
+        lines.append("| ⏱️ **CI Minutes Saved** | **Clean Run** | 0 wasted retries |")
+        lines.append("| 🚫 **Blind Retries Avoided** | **0** | No failure interventions needed |")
+
+    lines.append(f"| 🔄 **Flaky Retries Executed** | **{retries_used}/{retries_max}** | Safe, isolated reruns |")
+    lines.append(f"| ⏳ **CI Minutes Consumed** | **{minutes}/{minutes_max} min** | Run compute budget |")
+    lines.append(f"| 🎯 **PR Terminal Status** | {emoji} `{terminal}` | Gate conclusion |")
+    lines.append("")
+
     if failed:
         lines += [
+            "### 🔍 Failure Classifications",
             "| Check | Classification | Confidence |",
             "|---|---|---|",
         ]
@@ -79,10 +119,6 @@ def _format_report(snap: dict) -> str:
             )
         lines.append("")
 
-    retries_used = cost.get("retries_used_pr", 0)
-    retries_max = cost.get("retries_max_pr", "?")
-    minutes = cost.get("minutes_spent", 0)
-    minutes_max = cost.get("minutes_max", "?")
     lines.append(f"Budget: {retries_used}/{retries_max} retries · {minutes}/{minutes_max} min")
 
     if qc:
@@ -91,8 +127,8 @@ def _format_report(snap: dict) -> str:
             "run `ci-guard ledger quarantine-candidates`"
         )
 
-    emoji = _TERMINAL_EMOJI.get(terminal, "")
     lines.append(f"\nTerminal: {emoji} `{terminal}`")
+    lines.append("\n---\n<sub>🛡️ Guarded by [ci-guard](https://github.com/Viniciuscarvalho/ci-guard) — stop burning CI minutes on blind retries.</sub>")
 
     return "\n".join(lines)
 

@@ -1,0 +1,80 @@
+name: "ci-guard"
+description: "Guard CI from wasted minutes by classifying failures, maintaining a flaky-test ledger, and gating blind retries."
+author: "Vinicius Carvalho"
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  mode:
+    description: "Action mode: 'gate' (quality-gate status check), 'guard' (continuous watch & auto-retry), or 'report' (post savings report)."
+    required: false
+    default: "gate"
+  pr:
+    description: "PR number, PR URL, or 'auto' (default: auto-detected)."
+    required: false
+    default: "auto"
+  github-token:
+    description: "GitHub token for reading checks and posting PR comments."
+    required: false
+    default: "${{ github.token }}"
+  comment-pr:
+    description: "Whether to post/update the savings & efficiency report comment on the PR ('true' or 'false')."
+    required: false
+    default: "true"
+  post-summary:
+    description: "Whether to append the savings & efficiency report to GitHub Actions Step Summary ('true' or 'false')."
+    required: false
+    default: "true"
+  fail-on-block:
+    description: "In 'gate' mode, whether to exit with error when quality gate is blocked ('true' or 'false')."
+    required: false
+    default: "true"
+
+outputs:
+  verdict:
+    description: "Quality gate verdict: 'green', 'blocked', 'retryable', or 'exhausted'."
+    value: ${{ steps.run-ci-guard.outputs.verdict }}
+  exit-code:
+    description: "Exit code returned by ci-guard (0=green, 1=blocked, 2=retryable, 3=exhausted)."
+    value: ${{ steps.run-ci-guard.outputs.exit-code }}
+  minutes-saved:
+    description: "Estimated CI minutes saved by avoiding blind retries."
+    value: ${{ steps.run-ci-guard.outputs.minutes-saved }}
+  retries-avoided:
+    description: "Count of blind retries avoided."
+    value: ${{ steps.run-ci-guard.outputs.retries-avoided }}
+  minutes-spent:
+    description: "Total CI minutes spent on this PR."
+    value: ${{ steps.run-ci-guard.outputs.minutes-spent }}
+  report:
+    description: "Markdown formatted savings and failure classification report."
+    value: ${{ steps.run-ci-guard.outputs.report }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install ci-guard
+      shell: bash
+      run: |
+        python3 -m pip install --upgrade pip --quiet
+        python3 -m pip install "${{ github.action_path }}" --quiet
+
+    - name: Execute ci-guard
+      id: run-ci-guard
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_PR: ${{ inputs.pr }}
+        INPUT_COMMENT: ${{ inputs.comment-pr }}
+        INPUT_SUMMARY: ${{ inputs.post-summary }}
+        INPUT_FAIL_ON_BLOCK: ${{ inputs.fail-on-block }}
+      run: |
+        python3 "${{ github.action_path }}/scripts/action_entrypoint.py"

@@ -7,6 +7,12 @@
 </p>
 
 <p align="center">
+  <a href="https://pypi.org/project/ci-guard/">
+    <img src="https://img.shields.io/pypi/v/ci-guard.svg" alt="PyPI version">
+  </a>
+  <a href="https://github.com/marketplace/actions/ci-guard">
+    <img src="https://img.shields.io/badge/GitHub%20Action-1--Click-blue.svg?logo=githubactions" alt="GitHub Action: 1-Click">
+  </a>
   <a href="https://github.com/Viniciuscarvalho/ci-guard/actions/workflows/ci.yml">
     <img src="https://github.com/Viniciuscarvalho/ci-guard/actions/workflows/ci.yml/badge.svg" alt="CI">
   </a>
@@ -57,6 +63,30 @@ ci-guard makes your coding agent refuse to retry until a failure is _classified_
 
 ## Quick start
 
+### ⚡ 1-Click GitHub Action (Zero setup)
+
+Add `ci-guard` directly into any GitHub Actions PR workflow:
+
+```yaml
+- name: CI Guard Gate
+  uses: Viniciuscarvalho/ci-guard@v0.5.0
+  with:
+    mode: gate
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Or run as an automated delivery watcher that retries flakes, halts on branch failures, and comments the savings report:
+
+```yaml
+- name: CI Guard Delivery Loop
+  uses: Viniciuscarvalho/ci-guard@v0.5.0
+  with:
+    mode: guard
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### 💻 Local / Agent Quick Start
+
 **Step 1 — install (once per machine)**
 
 ```bash
@@ -94,6 +124,12 @@ git add .ci-guard .gitignore && git commit -m "ci: bootstrap ci-guard"
 # Snapshot a failing PR — always start here
 ci-guard watch --pr auto --once
 
+# Generate / post PR savings report
+ci-guard report --pr auto --comment
+
+# Quality-gate check
+ci-guard gate --pr auto
+
 # Budget-safe retry (refuses on branch_failure or exhausted budget)
 ci-guard watch --pr auto --retry-failed-now
 
@@ -103,6 +139,37 @@ ci-guard watch --pr auto --verify-flaky-green
 
 → Full install details and agent matrix: [Installation](#installation)
 → All commands with output examples: [Usage](#usage)
+
+---
+
+## 💰 PR Savings & Efficiency Report
+
+Every time `ci-guard` analyzes or guards a PR, it surfaces real-time metrics showing how many blind retries were prevented and how many compute minutes were saved:
+
+```markdown
+<!-- ci-guard-report -->
+## 🛡️ **ci-guard** — PR #42 | `abc1234`
+
+### 💰 Savings & Efficiency Summary
+| Metric | Result | Context |
+|:---|:---:|:---|
+| ⏱️ **CI Minutes Saved** | **~24 min** | Avoided running doomed reruns |
+| 🚫 **Blind Retries Avoided** | **2** | Blocked retry on code/branch errors |
+| 🔄 **Flaky Retries Executed** | **1/5** | Safe, isolated reruns |
+| ⏳ **CI Minutes Consumed** | **15/90 min** | Run compute budget |
+| 🎯 **PR Terminal Status** | ✅ `pr_merged` | Gate conclusion |
+
+### 🔍 Failure Classifications
+| Check | Classification | Confidence |
+|---|---|---|
+| `test/unit` | `branch_failure` | high |
+
+Budget: 1/5 retries · 15/90 min
+
+Terminal: ✅ `pr_merged`
+---
+<sub>🛡️ Guarded by ci-guard — stop burning CI minutes on blind retries.</sub>
+```
 
 ---
 
@@ -435,14 +502,12 @@ Add as a required status check or a standalone workflow step:
     fi
 ```
 
-### Hook 3 — Surface classifications on the PR page
+### Hook 3 — Auto-retry flakes & surface savings report via `deliver.yml`
 
-The `deliver.yml` workflow (included in this repo) wires `ci-guard watch --stream` into a
-`workflow_run` trigger so classifications appear on the PR page automatically — no manual
-invocation needed.
+The `deliver.yml` workflow wires `ci-guard` into a `workflow_run` trigger so classifications and savings reports appear on the PR page automatically:
 
 ```yaml
-# .github/workflows/deliver.yml (already included in ci-guard — copy to your repo)
+# .github/workflows/deliver.yml
 on:
   workflow_run:
     workflows: [ci] # replace with your workflow name(s)
@@ -461,20 +526,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-      - name: Install ci-guard
-        run: pip install ci-guard
       - name: Watch and guard
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ci-guard watch --pr auto --stream | ci-guard run-actions
+        uses: Viniciuscarvalho/ci-guard@v0.5.0
+        with:
+          mode: guard
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-`ci-guard run-actions` consumes the JSONL stream and posts:
+`ci-guard` watches the PR, handles flaky reruns, and posts:
 
 - `::error::` / `::warning::` **workflow annotations** visible in the job log and Files tab.
-- **PR comments** on `branch_failure` (do-not-retry warning), `unknown` failure (manual
-  triage prompt), and at the final stop event (a full classification table + budget summary).
+- **PR comments** with the complete **Savings & Efficiency Summary** and failure classifications.
 - A **markdown report** in `$GITHUB_STEP_SUMMARY` (visible on the workflow run summary page).
 
 → See [`docs/github-actions.md`](docs/github-actions.md) for the full walkthrough, opt-in instructions, and troubleshooting.

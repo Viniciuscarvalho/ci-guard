@@ -153,13 +153,17 @@ def evaluate_budget(state: dict, pr: int, cfg: dict) -> dict:
         "retries_used": 0,
         "retries_per_job": {},
         "minutes_spent": 0,
+        "retries_avoided": 0,
+        "minutes_saved": 0,
     })
     return {
         "retries_used_pr": pr_state["retries_used"],
         "retries_max_pr": cfg["retries_per_pr"],
+        "retries_avoided_pr": pr_state.get("retries_avoided", 0),
         "retries_used_per_job": dict(pr_state["retries_per_job"]),
         "retries_max_per_job": cfg["retries_per_job"],
         "minutes_spent": pr_state["minutes_spent"],
+        "minutes_saved": pr_state.get("minutes_saved", 0),
         "minutes_max": cfg["minutes_per_pr"],
         "any_budget_exhausted": (
             pr_state["retries_used"] >= cfg["retries_per_pr"]
@@ -312,6 +316,29 @@ def assemble_snapshot(pr: int, repo_root_path: Path) -> Snapshot:
     raw_checks = fetch_checks(pr)
     snaps = [_check_to_snapshot(c, ledger, repo_root_path, state, pr)
              for c in raw_checks]
+
+    pr_key = str(pr)
+    pstate = state.setdefault("prs", {}).setdefault(pr_key, {
+        "retries_used": 0,
+        "retries_per_job": {},
+        "minutes_spent": 0,
+        "retries_avoided": 0,
+        "minutes_saved": 0,
+    })
+    calc_minutes = sum(c.duration_seconds for c in snaps if c.duration_seconds) // 60
+    if calc_minutes > pstate["minutes_spent"]:
+        pstate["minutes_spent"] = calc_minutes
+
+    blocked_checks = [
+        c for c in snaps
+        if c.classification.get("category") in {"branch_failure", "unknown"}
+        and c.conclusion in {"failure", "cancelled", "timed_out"}
+    ]
+    if blocked_checks:
+        pstate["retries_avoided"] = max(pstate.get("retries_avoided", 0), len(blocked_checks))
+        saved_mins = sum(max(1, round((c.duration_seconds or 300) / 60)) for c in blocked_checks)
+        pstate["minutes_saved"] = max(pstate.get("minutes_saved", 0), saved_mins)
+
     budget = evaluate_budget(state, pr, cfg)
 
     snapshot = Snapshot(

@@ -40,4 +40,4 @@ packages = ["src/ci_guard"]
 "src" = ""
 
 [tool.hatch.build.targets.sdist]
-include = ["src/", "README.md", "SKILL.md"]
+include = ["src/", "README.md", "SKILL.md", "LICENSE"]
