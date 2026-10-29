@@ -1,7 +1,64 @@
-# GitHub Actions integration
+## ⚡ 1-Click GitHub Action (`Viniciuscarvalho/ci-guard`)
 
-ci-guard offers three GitHub Actions hooks. The first two sharpen the flaky ledger
-automatically; the third surfaces classifications directly on the PR page.
+You can install ci-guard directly in your workflows with a single step — no manual Python or CLI setup required.
+
+### Use Case A: Required Status Gate on Pull Requests
+
+Add this job to your pull request workflow. It classifies failures, prevents merging on `branch_failure`, and comments the **Savings & Efficiency Report** on the PR:
+
+```yaml
+- name: CI Guard Gate
+  uses: Viniciuscarvalho/ci-guard@v0.5.0
+  with:
+    mode: gate
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Use Case B: Automated Delivery Loop (`workflow_run`)
+
+Automatically watch completed CI runs, retry legitimate flakes (`infra_flake`, `test_flake`), block doomed retries, and post the final savings report:
+
+```yaml
+- name: CI Guard Delivery Loop
+  uses: Viniciuscarvalho/ci-guard@v0.5.0
+  with:
+    mode: guard
+    pr: ${{ steps.pr.outputs.number }}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+---
+
+## 💰 PR Savings & Efficiency Report
+
+Whenever ci-guard finishes analyzing a PR or gates a failure, it posts (or updates) an eye-catching savings report directly into the PR conversation:
+
+```markdown
+<!-- ci-guard-report -->
+## 🛡️ **ci-guard** — PR #42 | `abc1234`
+
+### 💰 Savings & Efficiency Summary
+| Metric | Result | Context |
+|:---|:---:|:---|
+| ⏱️ **CI Minutes Saved** | **~24 min** | Avoided running doomed reruns |
+| 🚫 **Blind Retries Avoided** | **2** | Blocked retry on code/branch errors |
+| 🔄 **Flaky Retries Executed** | **1/5** | Safe, isolated reruns |
+| ⏳ **CI Minutes Consumed** | **15/90 min** | Run compute budget |
+| 🎯 **PR Terminal Status** | ✅ `pr_merged` | Gate conclusion |
+
+### 🔍 Failure Classifications
+| Check | Classification | Confidence |
+|---|---|---|
+| `test/unit` | `branch_failure` | high |
+
+Budget: 1/5 retries · 15/90 min
+
+Terminal: ✅ `pr_merged`
+---
+<sub>🛡️ Guarded by ci-guard — stop burning CI minutes on blind retries.</sub>
+```
+
+---
 
 ## Hook 1 — Record failures from the test runner
 
@@ -34,35 +91,7 @@ Add as a required status check or a standalone step after tests run:
     fi
 ```
 
-## Hook 3 — Surface classifications on the PR page
-
-`deliver.yml` wires `ci_watch --watch` into a `workflow_run` trigger so
-classifications appear on the PR page automatically after every CI run — no manual
-invocation required.
-
-### How it works
-
-1. Your `ci` workflow completes (pass or fail) on a PR branch.
-2. `deliver.yml` fires via `workflow_run` on that completion event.
-3. It resolves the PR number from the triggering branch.
-4. It pipes `ci_watch.py --watch` into `action_runner.py`.
-5. `action_runner.py` reads the JSONL stream and posts to the PR.
-
-### What gets posted
-
-| Output                                | When                       | Where visible             |
-| ------------------------------------- | -------------------------- | ------------------------- |
-| `::error:: branch_failure` annotation | Any `branch_failure` check | Job log + Files tab       |
-| `::warning:: unknown` annotation      | Any `unknown` check        | Job log + Files tab       |
-| PR comment — branch failure           | `branch_failure` detected  | PR conversation tab       |
-| PR comment — unknown failure          | `unknown` detected         | PR conversation tab       |
-| PR comment — final report             | Terminal state reached     | PR conversation tab       |
-| Markdown step summary                 | Terminal state reached     | Workflow run summary page |
-
-The final PR comment includes a table of every failing check with its classification
-and confidence, the current retry budget, and a quarantine-candidate count.
-
-### Full workflow file
+## Hook 3 — Surface classifications & auto-retry via `deliver.yml`
 
 Copy `deliver.yml` from this repo into your project's `.github/workflows/`:
 
@@ -76,7 +105,6 @@ on:
 
 jobs:
   guard:
-    # Only runs for pull_request events — not direct pushes to main.
     if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -110,12 +138,11 @@ jobs:
 
       - name: Watch and guard
         if: steps.pr.outputs.skip != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ci-guard watch \
-            --pr ${{ steps.pr.outputs.number }} --stream | \
-          ci-guard run-actions
+        uses: Viniciuscarvalho/ci-guard@v0.5.0
+        with:
+          mode: guard
+          pr: ${{ steps.pr.outputs.number }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ### Required permissions

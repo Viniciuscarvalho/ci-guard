@@ -95,7 +95,8 @@ def _print_report(snap: Snapshot, verdict: str, blocked: list[str],
     print("\n".join(lines))
 
 
-def cmd_gate(pr: int, repo_root_path: Path, *, json_output: bool = False) -> int:
+def cmd_gate(pr: int, repo_root_path: Path, *, json_output: bool = False,
+             comment: bool = False, summary: bool = False) -> int:
     snap = assemble_snapshot(pr, repo_root_path)
     verdict, exit_code, blocked, unknown, retryable = _verdict(snap)
 
@@ -114,5 +115,14 @@ def cmd_gate(pr: int, repo_root_path: Path, *, json_output: bool = False) -> int
         }, indent=2, default=str))
     else:
         _print_report(snap, verdict, blocked, unknown, retryable)
+
+    if comment or summary:
+        from dataclasses import asdict
+        from ci_guard.actions import _format_report, _post_pr_comment, _write_step_summary
+        rep = _format_report(asdict(snap))
+        if comment:
+            _post_pr_comment(pr, rep)
+        if summary:
+            _write_step_summary(rep)
 
     return exit_code

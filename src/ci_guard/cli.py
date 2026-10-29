@@ -55,6 +55,21 @@ def main() -> None:
     g.add_argument("--pr", default="auto", help="PR number, URL, or 'auto' (default).")
     g.add_argument("--json", dest="json_output", action="store_true",
                    help="Emit machine-readable JSON instead of a human report.")
+    g.add_argument("--comment", action="store_true",
+                   help="Post savings & efficiency report comment on PR.")
+    g.add_argument("--summary", action="store_true",
+                   help="Write savings & efficiency report to GITHUB_STEP_SUMMARY.")
+
+    # report
+    rep = sub.add_parser(
+        "report",
+        help="Generate or post the savings & efficiency report for a PR.",
+    )
+    rep.add_argument("--pr", default="auto", help="PR number, URL, or 'auto' (default).")
+    rep.add_argument("--comment", action="store_true", help="Post or update the report comment on the PR.")
+    rep.add_argument("--summary", action="store_true", help="Append report to GITHUB_STEP_SUMMARY.")
+    rep.add_argument("--json", dest="json_output", action="store_true",
+                     help="Emit machine-readable JSON summary.")
 
     # run-actions
     sub.add_parser("run-actions",
@@ -123,8 +138,49 @@ def _dispatch(args) -> int:
         from ci_guard.gate import cmd_gate
         from ci_guard._providers.github import resolve_pr as _resolve_pr
         from ci_guard.watch import repo_root as _repo_root
-        return cmd_gate(_resolve_pr(args.pr), _repo_root(),
-                        json_output=getattr(args, "json_output", False))
+        return cmd_gate(
+            _resolve_pr(args.pr),
+            _repo_root(),
+            json_output=getattr(args, "json_output", False),
+            comment=getattr(args, "comment", False),
+            summary=getattr(args, "summary", False),
+        )
+
+    if cmd == "report":
+        from dataclasses import asdict
+        import json as _json
+        from ci_guard._providers.github import resolve_pr as _resolve_pr
+        from ci_guard.watch import assemble_snapshot, repo_root as _repo_root
+        from ci_guard.actions import _format_report, _post_pr_comment, _write_step_summary
+
+        pr_num = _resolve_pr(args.pr)
+        snap = assemble_snapshot(pr_num, _repo_root())
+        snap_dict = asdict(snap)
+        report = _format_report(snap_dict)
+
+        if getattr(args, "json_output", False):
+            cost = snap_dict.get("cost_summary", {})
+            output_data = {
+                "pr_number": pr_num,
+                "head_sha": snap_dict.get("head_sha", ""),
+                "terminal": snap_dict.get("terminal"),
+                "minutes_saved": cost.get("minutes_saved", 0),
+                "retries_avoided": cost.get("retries_avoided_pr", 0),
+                "minutes_spent": cost.get("minutes_spent", 0),
+                "retries_used": cost.get("retries_used_pr", 0),
+                "report": report,
+            }
+            print(_json.dumps(output_data, indent=2, default=str))
+        else:
+            print(report)
+
+        if getattr(args, "comment", False):
+            _post_pr_comment(pr_num, report)
+
+        if getattr(args, "summary", False):
+            _write_step_summary(report)
+
+        return 0
 
     if cmd == "run-actions":
         from ci_guard.actions import run
@@ -138,3 +194,7 @@ def _dispatch(args) -> int:
         return 1
 
     return 0
+
+
+if __name__ == "__main__":
+    main()

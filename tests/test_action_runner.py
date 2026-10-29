@@ -314,6 +314,36 @@ class TestFormatReport(unittest.TestCase):
         report = action_runner._format_report(self._snap(checks=checks))
         self.assertNotIn("| Check |", report)
 
+    def test_savings_report_avoided_retries_and_minutes_saved(self):
+        snap = self._snap()
+        snap["cost_summary"] = {
+            "retries_used_pr": 1,
+            "retries_max_pr": 5,
+            "minutes_spent": 12,
+            "minutes_max": 90,
+            "retries_avoided_pr": 3,
+            "minutes_saved": 24,
+        }
+        report = action_runner._format_report(snap)
+        self.assertIn("CI Minutes Saved", report)
+        self.assertIn("~24 min", report)
+        self.assertIn("Blind Retries Avoided", report)
+        self.assertIn("3", report)
+        self.assertIn("Savings & Efficiency Summary", report)
+
+    def test_clean_run_savings_report(self):
+        snap = self._snap()
+        snap["cost_summary"] = {
+            "retries_used_pr": 0,
+            "retries_max_pr": 5,
+            "minutes_spent": 8,
+            "minutes_max": 90,
+            "retries_avoided_pr": 0,
+            "minutes_saved": 0,
+        }
+        report = action_runner._format_report(snap)
+        self.assertIn("Clean Run", report)
+
 
 # --------------------------------------------------------------------------- #
 # Pass-through
